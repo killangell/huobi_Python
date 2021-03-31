@@ -9,11 +9,18 @@ from huobi.utils import *
 import pandas as pd
 
 market_client = MarketClient(init_log=True)
-interval = CandlestickInterval.MIN60
+interval = CandlestickInterval.MIN5
 symbol = "btcusdt"
+kline_num = 2000
+smart_holding = True
+money_available = 350
+money_budget_each = 20
+log_file = "{0}_{1}_{2}_{3}_[{4}-{5}].log".format(symbol, interval, kline_num,
+                                                  'holding' if smart_holding else 'non-holding',
+                                                  money_available, money_budget_each)
 
-log_file = "lessismore_tester.log"
-log_backup_file = "lessismore_tester.log.backup"
+# log_file = "lessismore_tester.log"
+# log_backup_file = "lessismore_tester.log.backup"
 
 class Lessismore:
     def __init__(self):
@@ -21,11 +28,11 @@ class Lessismore:
 
     def init_log(self):
         # backup a log copy, in case any error would be overwritten in a new run
-        if UPath.is_file_exists(log_backup_file):
-            UPath.remove(log_backup_file)
-
-        if UPath.is_file_exists(log_file):
-            UPath.rename(log_file, log_backup_file)
+        # if UPath.is_file_exists(log_backup_file):
+        #     UPath.remove(log_backup_file)
+        #
+        # if UPath.is_file_exists(log_file):
+        #     UPath.rename(log_file, log_backup_file)
 
         logging.basicConfig(level=logging.INFO,  # 控制台打印的日志级别
                             filename=log_file,
@@ -62,7 +69,7 @@ class Lessismore:
         return org
 
     def run(self):
-        kline_list = market_client.get_candlestick(symbol, interval, 150)
+        kline_list = market_client.get_candlestick(symbol, interval, kline_num)
         # LogInfo.output("---- {interval} candlestick for {symbol} ----".format(interval=interval, symbol=symbol))
         # LogInfo.output_list(kline_list)
 
@@ -70,8 +77,8 @@ class Lessismore:
         global_data = self.parse_kline_data(kline_list)
         global_data.calculate_macd()
 
-        money_available = 10000
-        money_budget_each = 500
+        global money_available
+        global money_budget_each
         bought_count = 0
         bought_used_money = 0
         bought_num = 0
@@ -100,7 +107,10 @@ class Lessismore:
                 # 执行 buy
                 if macd_hist_cur:
                     if money_available > money_budget_each:
-                        if last_price == 0 or (last_price > 0 and global_data.get_close(i) < last_price):
+                        unholding_condition = global_data.get_close(i) < last_price
+                        if not smart_holding:
+                            unholding_condition = True
+                        if last_price == 0 or (last_price > 0 and unholding_condition):
                             bought_count += 1
                             money_available -= money_budget_each
                             bought_num_this_time = money_budget_each / global_data.get_close(i)

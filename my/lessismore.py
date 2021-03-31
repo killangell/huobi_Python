@@ -36,6 +36,7 @@ class TradeDirection(IntEnum):
 
 
 trade_direction_his = TradeDirection.INVALID
+trade_direction_cur = None
 LOG_THROTTLE_COUNT = 20
 log_throttle = 0
 
@@ -46,6 +47,7 @@ need_moniotr = True
 
 # 每次买入的金额
 cost_step_len = 50
+
 
 class Lessismore:
     def __init__(self):
@@ -146,7 +148,7 @@ class Lessismore:
             time.sleep(2)
 
     def run(self):
-        trade_direction_cur = None
+        global trade_direction_cur
         global trade_direction_his
         global need_moniotr
         global log_throttle
@@ -175,7 +177,8 @@ class Lessismore:
         if (trade_direction_his != trade_direction_cur) or need_moniotr:
             usdt = fil = btc = 0
             usdt, fil, btc = self.reliable_get_balance()
-            logging.info("Holdings usdt={0} btc={1}".format(usdt, btc))
+            logging.info("Holdings usdt={0} btc={1} dir={2}".format(
+                usdt, btc, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
 
             operation = 0
             hist = last_hist
@@ -191,6 +194,8 @@ class Lessismore:
 
             last_price = 0  # 最后执行 BUY_DONE 的价格
             profit_at_least = 200  # 交易会产生各种手续费，至少保证盈利200，否则不卖
+            first_long_ts = ''
+            first_long_price = 0
 
             operation = Operation.ERROR
             ops = lessdb.select_last_one()
@@ -206,6 +211,7 @@ class Lessismore:
                     num_expected = 0
                     num_actually = 0
                     last_price = 0
+                    need_moniotr = False
                 else:
                     count = ops[BTC_OPS_TABLE.COUNT]
                     # cost_now = ops[BTC_OPS_TABLE.COST_NOW]
@@ -214,7 +220,8 @@ class Lessismore:
                     num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
                     num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
                     ops = lessdb.select_by_operation(operation=Operation.BUY_DONE)
-                    last_price = ops[BTC_OPS_TABLE.CLOSE]
+                    if ops:
+                        last_price = ops[BTC_OPS_TABLE.CLOSE]
 
             # Buy
             if trade_direction_cur == TradeDirection.LONG:
@@ -222,46 +229,48 @@ class Lessismore:
                 # 如果查询数据库里最近一次买的时间大于等于本周期内第一次变成绿柱的时间，则说明已经买过了
                 # 如果当前不是第一个绿柱，则找到第一个绿柱
                 # 如果当前收盘价格低于第一个绿柱，则是买入好时机，否则不操作
-                if last_hist_pre > 0:
-                    i = global_data.get_len() - 2
-                    while i > 0:
-                        hist_tmp = global_data.get_hist(i)
-                        if hist_tmp < 0:
-                            # 第一个绿柱位置
-                            i += 1
-                            break
-                        i -= 1
-                    first_long_ts = global_data.get_timestamp(i)
-                    ops = lessdb.select_by_operation(operation=Operation.BUY_DONE)
-                    if ops:
-                        last_buy_done_time = ops[BTC_OPS_TABLE.TIME]
-                        if last_buy_done_time:
-                            last_buy_done_time_tmp = last_buy_done_time.replace('_', '')
-                            first_long_ts_tmp = first_long_ts.replace('_', '')
-                            last_buy_done_time_int = time.strptime(last_buy_done_time_tmp, '%Y%m%d%H%M%S')
-                            firt_long_time_int = time.strptime(first_long_ts_tmp, '%Y%m%d%H%M%S')
-                            time1 = time.mktime(last_buy_done_time_int)
-                            time2 = time.mktime(firt_long_time_int)
-                            if time2 < time1:
-                                # 每个周期只买一次，本周期内已经买过了，不再交易
-                                logging.info(
-                                    "Already bought in this period on last_buy_done_tim={0}, first_long_time={1}".format(
-                                        last_buy_done_time, first_long_ts))
-                                logging.info(
-                                    "BUY_GIVEUP time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                                    "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                        format(last_ts, hist, close, count, cost_now, cost_used, cost_average,
-                                               budget_available,
-                                               num_expected, num_actually, num_holding))
+                # if last_hist_pre > 0:
+                i = global_data.get_len() - 2
+                while i > 0:
+                    hist_tmp = global_data.get_hist(i)
+                    if hist_tmp < 0:
+                        # 第一个绿柱位置
+                        i += 1
+                        break
+                    i -= 1
+                first_long_ts = global_data.get_timestamp(i)
+                first_long_price = global_data.get_close(i)
+                ops = lessdb.select_by_operation(operation=Operation.BUY_DONE)
+                if ops:
+                    last_buy_done_time = ops[BTC_OPS_TABLE.TIME]
+                    if last_buy_done_time:
+                        last_buy_done_time_tmp = last_buy_done_time.replace('_', '')
+                        first_long_ts_tmp = first_long_ts.replace('_', '')
+                        last_buy_done_time_int = time.strptime(last_buy_done_time_tmp, '%Y%m%d%H%M%S')
+                        firt_long_time_int = time.strptime(first_long_ts_tmp, '%Y%m%d%H%M%S')
+                        time1 = time.mktime(firt_long_time_int)
+                        time2 = time.mktime(last_buy_done_time_int)
+                        if time1 <= time2:
+                            # 每个周期只买一次2本周期内已经买过了，不再交易
+                            logging.info(
+                                "Already bought in this period on last_buy_done_tim={0}, first_long_time={1}".format(
+                                    last_buy_done_time, first_long_ts))
+                            logging.info(
+                                "BUY_GIVEUP time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                                "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
+                                    format(last_ts, hist, close, count, cost_now, cost_used, cost_average,
+                                           budget_available,
+                                           num_expected, num_actually, num_holding))
 
-                                trade_direction_his = trade_direction_cur
-                                need_moniotr = False
-                                log_throttle = 0
-                                return
+                            trade_direction_his = trade_direction_cur
+                            need_moniotr = False
+                            log_throttle = 0
+                            return
 
                 if budget_available > cost_now:
                     # 查询上次买入价格，如果当前收盘价格低于上次买入价格，则加仓
-                    if last_price == 0 or (last_price > 0 and real_time_close < last_price):
+                    if (last_price == 0 and real_time_close < first_long_price) or \
+                            (last_price > 0 and real_time_close < last_price):
                         # Buy 操作
                         order_id = self.reliable_create_order(order_type=OrderType.BUY_MARKET, amount=cost_now,
                                                               price=1.292)
@@ -346,7 +355,8 @@ class Lessismore:
 
                 else:
                     if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        values = [last_ts, Operation.SELL_HOLDING, hist, close, count, cost_now, cost_used, cost_average,
+                        values = [last_ts, Operation.SELL_HOLDING, hist, close, count, cost_now, cost_used,
+                                  cost_average,
                                   budget_available, num_expected, num_actually, num_holding]
                         lessdb.insert(values=values)
 
@@ -366,7 +376,8 @@ if __name__ == "__main__":
 
     while True:
         try:
-            logging.info("run {0}-{1}".format(symbol, interval))
+            print("{0}: run {1}-{2}".format(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())),
+                                                symbol, interval))
             lessismore.run()
         except HuobiApiException as hberr:
             logging.error(hberr)
