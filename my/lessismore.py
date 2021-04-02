@@ -47,7 +47,10 @@ need_moniotr = True
 
 # 每次买入的金额
 cost_step_len = 50
-
+# 交易会产生各种手续费，至少保证盈利200，否则不卖
+profit_at_least = 200
+# 加仓差价，防止大跌的时候，本金在高位就被耗完
+buy_holding_diff = 500
 
 class Lessismore:
     def __init__(self):
@@ -152,6 +155,8 @@ class Lessismore:
         global trade_direction_his
         global need_moniotr
         global log_throttle
+        global profit_at_least
+        global buy_holding_diff
 
         kline_list = self.reliable_get_candlestick(symbol, interval, 300)
 
@@ -180,6 +185,12 @@ class Lessismore:
             logging.info("Holdings usdt={0} btc={1} dir={2}".format(
                 usdt, btc, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
 
+            # 如果上次是 SELL_HOLING 状态 log_throttle 已经不是 0
+            # 在多空转换的时候，如果现在是 BUY_HOLDING 状态，则可能无法打印第一次的log
+            # 所以需要将 log_throttle 清 0
+            if trade_direction_his != trade_direction_cur:
+                log_throttle = 0
+
             operation = 0
             hist = last_hist
             close = last_close
@@ -193,7 +204,6 @@ class Lessismore:
             num_holding = btc
 
             last_price = 0  # 最后执行 BUY_DONE 的价格
-            profit_at_least = 200  # 交易会产生各种手续费，至少保证盈利200，否则不卖
             first_long_ts = ''
             first_long_price = 0
 
@@ -270,7 +280,7 @@ class Lessismore:
                 if budget_available > cost_now:
                     # 查询上次买入价格，如果当前收盘价格低于上次买入价格，则加仓
                     if (last_price == 0 and real_time_close < first_long_price) or \
-                            (last_price > 0 and real_time_close < last_price):
+                            (last_price > 0 and real_time_close <= (last_price - buy_holding_diff)):
                         # Buy 操作
                         order_id = self.reliable_create_order(order_type=OrderType.BUY_MARKET, amount=cost_now,
                                                               price=1.292)
@@ -367,7 +377,7 @@ class Lessismore:
                                        num_expected, num_actually, num_holding))
                     need_moniotr = True
                     log_throttle += 1
-        trade_direction_his = trade_direction_cur
+            trade_direction_his = trade_direction_cur
 
 
 if __name__ == "__main__":
