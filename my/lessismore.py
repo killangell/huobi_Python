@@ -19,15 +19,6 @@ account_client = AccountClient(api_key=g_api_key,
 market_client = MarketClient(init_log=True)
 trade_client = TradeClient(api_key=g_api_key, secret_key=g_secret_key)
 
-LESSDB_FILE = "less.db"
-lessdb = Lessdb(LESSDB_FILE)
-
-interval = CandlestickInterval.MIN30
-symbol = "btcusdt"
-
-log_file = "lessismore.log"
-log_backup_file = "lessismore.log.backup"
-
 
 class TradeDirection(IntEnum):
     LONG = 0,
@@ -35,8 +26,26 @@ class TradeDirection(IntEnum):
     INVALID = 2,
 
 
+symbol = "btcusdt"
+interval = CandlestickInterval.MIN30
+# 每次买入的金额
+cost_step_len = 50
+# 交易会产生各种手续费，至少保证盈利200，否则不卖
+profit_at_least = 200
+# 加仓差价，防止大跌的时候，本金在高位就被耗完
+buy_holding_diff = 300
+# 程序在获取balance的时候，币的数量会四舍五入，获得的数量可能超过实际的数量
+# 防止在卖出的时候，出现卖出数量大于实际数量的错误，所以主动下调一部分数量
+coin_num_correction = 0.000004  # btc,大概1u价值
+
+LESSDB_FILE = "less_{0}.db".format(symbol)
+lessdb = Lessdb(LESSDB_FILE)
+
+log_file = "lessismore_{0}.log".format(symbol)
+log_backup_file = "{0}.backup".format(log_file)
+
 trade_direction_his = TradeDirection.INVALID
-trade_direction_cur = None
+trade_direction_cur = TradeDirection.INVALID
 LOG_THROTTLE_COUNT = 20
 log_throttle = 0
 
@@ -45,12 +54,6 @@ log_throttle = 0
 # 成功执行买入或者卖出的话，不需要监控
 need_moniotr = True
 
-# 每次买入的金额
-cost_step_len = 50
-# 交易会产生各种手续费，至少保证盈利200，否则不卖
-profit_at_least = 200
-# 加仓差价，防止大跌的时候，本金在高位就被耗完
-buy_holding_diff = 500
 
 class Lessismore:
     def __init__(self):
@@ -104,8 +107,8 @@ class Lessismore:
     def float_xf(self, str='0.1', precision=1):
         return format(float(str), '.{0}f'.format(precision))
 
-    def get_balance(self):
-        usdt = fil = btc = 0
+    def get_balance(self, symbol='btcusdt'):
+        usdt = eth = btc = 0
         account_balance_list = account_client.get_account_balance()
         if account_balance_list and len(account_balance_list):
             for account_obj in account_balance_list:
@@ -118,26 +121,31 @@ class Lessismore:
                         if item.type == 'trade':
                             if item.currency == 'usdt':
                                 usdt = item.balance
-                            if item.currency == 'fil':
-                                fil = item.balance
+                            if item.currency == 'eth':
+                                eth = item.balance
                             if item.currency == 'btc':
                                 btc = item.balance
-        return float(self.float_1f(usdt)), float(self.float_1f(fil)), (float(self.float_xf(btc, 6)) - 0.000001)
+        if symbol == 'btcusdt':
+            return float(self.float_1f(usdt)), \
+                   (float(self.float_xf(btc, 6)) - coin_num_correction)
+        elif symbol == 'ethusdt':
+            return float(self.float_1f(usdt)), \
+                   (float(self.float_xf(eth, 3)) - coin_num_correction)
 
     def reliable_get_balance(self):
         while True:
             try:
-                return self.get_balance()
-            except Exception as e:
-                logging.error("reliable_get_balance error : " + e)
+                return self.get_balance(symbol)
+            except HuobiApiException as e:
+                logging.error("reliable_get_balance error : " + e.error_message)
             time.sleep(2)
 
     def reliable_get_candlestick(self, symbol, period, size=200):
         while True:
             try:
                 return market_client.get_candlestick(symbol, interval, size)
-            except Exception as e:
-                logging.error("reliable_get_candlestick error : " + e)
+            except HuobiApiException as e:
+                logging.error("reliable_get_candlestick error : " + e.error_message)
             time.sleep(2)
 
     def reliable_create_order(self, order_type=OrderType.BUY_MARKET, amount=1., price=1.292):
@@ -146,9 +154,19 @@ class Lessismore:
                 return trade_client.create_order(symbol=symbol, account_id=g_account_id,
                                                  order_type=order_type, source=OrderSource.API,
                                                  amount=amount, price=price)
+            except HuobiApiException as e:
+                logging.error("reliable_create_order error : " + e.error_message)
+                if e.error_message.index("not enough") > 0:
+                    amount -= coin_num_correction
+                    logging.error("reliable_create_order reduce amount to {0}".format(amount))
             except Exception as e:
                 logging.error("reliable_create_order error : " + e)
             time.sleep(2)
+
+    def get_time_seconds(self, time_str):
+        time_str_tmp = time_str.replace('_', '')
+        time1_str_tmp_int = time.strptime(time_str_tmp, '%Y%m%d%H%M%S')
+        return time.mktime(time1_str_tmp_int)
 
     def run(self):
         global trade_direction_cur
@@ -180,10 +198,24 @@ class Lessismore:
             return
 
         if (trade_direction_his != trade_direction_cur) or need_moniotr:
-            usdt = fil = btc = 0
-            usdt, fil, btc = self.reliable_get_balance()
-            logging.info("Holdings usdt={0} btc={1} dir={2}".format(
-                usdt, btc, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
+            usdt = coin_num = 0
+            usdt, coin_num = self.reliable_get_balance()
+            logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
+                symbol, usdt, coin_num, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
+
+            hist = last_hist
+            close = last_close
+            count = 0
+            cost_now = cost_step_len
+            cost_used = 0
+            cost_average = 0
+            num_expected = 0
+            num_actually = 0
+            num_holding = coin_num
+            budget_available = usdt
+            last_price = 0  # 最后执行 BUY_DONE 的价格
+            first_long_ts = ''
+            first_long_price = 0
 
             # 如果上次是 SELL_HOLING 状态 log_throttle 已经不是 0
             # 在多空转换的时候，如果现在是 BUY_HOLDING 状态，则可能无法打印第一次的log
@@ -191,47 +223,41 @@ class Lessismore:
             if trade_direction_his != trade_direction_cur:
                 log_throttle = 0
 
-            operation = 0
-            hist = last_hist
-            close = last_close
-            count = 0
-            cost_now = cost_step_len
-            cost_used = 0
-            cost_average = 0
-            budget_available = usdt
-            num_expected = 0
-            num_actually = 0
-            num_holding = btc
+            ops1 = lessdb.select_last_one_by_operation(operation=Operation.BUY_DONE)
+            ops2 = lessdb.select_last_one_by_operation(operation=Operation.SELL_DONE)
 
-            last_price = 0  # 最后执行 BUY_DONE 的价格
-            first_long_ts = ''
-            first_long_price = 0
-
-            operation = Operation.ERROR
-            ops = lessdb.select_last_one()
-            budget_available = usdt
-            num_holding = btc
-            if ops:
-                operation = ops[BTC_OPS_TABLE.OPERATION]
-                if operation == Operation.SELL_DONE:
-                    count = 0
-                    # cost_now = 0
-                    cost_used = 0
-                    cost_average = 0
-                    num_expected = 0
-                    num_actually = 0
-                    last_price = 0
-                    need_moniotr = False
-                else:
+            if ops1 and not ops2:
+                logging.info("case 1")
+                ops = ops1
+                count = ops[BTC_OPS_TABLE.COUNT]
+                cost_used = ops[BTC_OPS_TABLE.COST_USED]
+                cost_average = ops[BTC_OPS_TABLE.COST_AVERAGE]
+                num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
+                num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
+                last_price = ops[BTC_OPS_TABLE.CLOSE]
+            if ops1 and ops2:
+                logging.info("case 2")
+                buy_done_time_str = ops1[BTC_OPS_TABLE.TIME]
+                sell_down_time_str = ops2[BTC_OPS_TABLE.TIME]
+                buy_done_time = self.get_time_seconds(buy_done_time_str)
+                sell_down_time = self.get_time_seconds(sell_down_time_str)
+                if buy_done_time > sell_down_time:
+                    ops = ops1
                     count = ops[BTC_OPS_TABLE.COUNT]
-                    # cost_now = ops[BTC_OPS_TABLE.COST_NOW]
                     cost_used = ops[BTC_OPS_TABLE.COST_USED]
                     cost_average = ops[BTC_OPS_TABLE.COST_AVERAGE]
                     num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
                     num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
-                    ops = lessdb.select_by_operation(operation=Operation.BUY_DONE)
-                    if ops:
-                        last_price = ops[BTC_OPS_TABLE.CLOSE]
+                    last_price = ops[BTC_OPS_TABLE.CLOSE]
+            if not ops1 and ops2:
+                logging.info("case 3")
+                count = 0
+                cost_used = 0
+                cost_average = 0
+                num_expected = 0
+                num_actually = 0
+                last_price = 0
+                need_moniotr = False
 
             # Buy
             if trade_direction_cur == TradeDirection.LONG:
@@ -250,18 +276,14 @@ class Lessismore:
                     i -= 1
                 first_long_ts = global_data.get_timestamp(i)
                 first_long_price = global_data.get_close(i)
-                ops = lessdb.select_by_operation(operation=Operation.BUY_DONE)
+                ops = ops1
                 if ops:
                     last_buy_done_time = ops[BTC_OPS_TABLE.TIME]
                     if last_buy_done_time:
-                        last_buy_done_time_tmp = last_buy_done_time.replace('_', '')
-                        first_long_ts_tmp = first_long_ts.replace('_', '')
-                        last_buy_done_time_int = time.strptime(last_buy_done_time_tmp, '%Y%m%d%H%M%S')
-                        firt_long_time_int = time.strptime(first_long_ts_tmp, '%Y%m%d%H%M%S')
-                        time1 = time.mktime(firt_long_time_int)
-                        time2 = time.mktime(last_buy_done_time_int)
+                        time1 = self.get_time_seconds(first_long_ts)
+                        time2 = self.get_time_seconds(last_buy_done_time)
                         if time1 <= time2:
-                            # 每个周期只买一次2本周期内已经买过了，不再交易
+                            # 每个周期只买一次，如果本周期内已经买过了，则不再交易
                             logging.info(
                                 "Already bought in this period on last_buy_done_tim={0}, first_long_time={1}".format(
                                     last_buy_done_time, first_long_ts))
@@ -280,17 +302,17 @@ class Lessismore:
                 if budget_available > cost_now:
                     # 查询上次买入价格，如果当前收盘价格低于上次买入价格，则加仓
                     if (last_price == 0 and real_time_close < first_long_price) or \
-                            (last_price > 0 and real_time_close <= (last_price - buy_holding_diff)):
+                            (last_price > 0 and (last_price - real_time_close >= buy_holding_diff)):
                         # Buy 操作
                         order_id = self.reliable_create_order(order_type=OrderType.BUY_MARKET, amount=cost_now,
                                                               price=1.292)
                         # 更新记录
-                        usdt, fil, btc = self.reliable_get_balance()
+                        usdt, coin_num = self.reliable_get_balance()
 
                         count += 1
                         budget_available = usdt
                         num_expected = cost_now / (last_close + 200)  # Market 价格一般高于收盘价，误差200
-                        num_holding = btc
+                        num_holding = coin_num
                         cost_used += cost_now
                         if num_holding > 0.0:
                             cost_average = cost_used / num_holding
@@ -337,12 +359,13 @@ class Lessismore:
                     need_moniotr = True
                     log_throttle += 1
             # Sell
-            elif trade_direction_cur == TradeDirection.SHORT and btc > 0.0:
+            elif trade_direction_cur == TradeDirection.SHORT and coin_num > 0.0:
                 # 有利润才 sell
                 if real_time_close - cost_average > profit_at_least:
-                    order_id = self.reliable_create_order(order_type=OrderType.SELL_MARKET, amount=btc, price=None)
+                    order_id = self.reliable_create_order(order_type=OrderType.SELL_MARKET, amount=coin_num,
+                                                          price=1.292)
 
-                    usdt, fil, btc = self.reliable_get_balance()
+                    usdt, coin_num = self.reliable_get_balance()
 
                     count = 0
                     budget_available = usdt
@@ -387,11 +410,9 @@ if __name__ == "__main__":
     while True:
         try:
             print("{0}: run {1}-{2}".format(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())),
-                                                symbol, interval))
+                                            symbol, interval))
             lessismore.run()
-        except HuobiApiException as hberr:
-            logging.error(hberr)
-        except Exception as err:
-            logging.error(err)
+        except Exception as e:
+            logging.error(e)
 
         time.sleep(30)

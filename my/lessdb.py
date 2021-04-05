@@ -100,7 +100,7 @@ class Lessdb:
         else:
             return None
 
-    def select_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE):
+    def select_last_one_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE):
         conn = sqlite3.connect(self._lessdb_file)
         cur = conn.cursor()
 
@@ -118,20 +118,35 @@ class Lessdb:
         else:
             return None
 
+    def debug_select_all(self, table='BTC_OPS'):
+        conn = sqlite3.connect(self._lessdb_file)
+        cur = conn.cursor()
+
+        cur.execute("SELECT * FROM {0} ORDER BY ID DESC".format(table))
+        # 获取查询结果
+        ret = cur.fetchall()
+        for row in ret:
+            print(row)
+
+        cur.close()
+        conn.close()
+
 if __name__ == "__main__":
-    LESSDB_FILE_TEST = 'less_test.db'
-    lessdb = Lessdb(LESSDB_FILE_TEST)
-
-    values = ['Time', Operation.BUY_HOLDING, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-    lessdb.insert('BTC_OPS', values)
-
-    lessdb.select('BTC_OPS')
-
-    ret = lessdb.select_last_one()
-    operation = ret[2]
-    time = ret[1]
-
-    lessdb.select_by_operation(operation=Operation.BUY_DONE)
+    lessdb = Lessdb("less.db")
+    lessdb.debug_select_all()
+    # LESSDB_FILE_TEST = 'less_test.db'
+    # lessdb = Lessdb(LESSDB_FILE_TEST)
+    #
+    # values = ['Time', Operation.BUY_HOLDING, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    # lessdb.insert('BTC_OPS', values)
+    #
+    # lessdb.select('BTC_OPS')
+    #
+    # ret = lessdb.select_last_one()
+    # operation = ret[2]
+    # time = ret[1]
+    #
+    # lessdb.select_last_one_by_operation(operation=Operation.BUY_DONE)
 
 # D:\Work\huobi_Python\huobi_Python\my>"D:\Tools\sqlite-tools-win32-x86-3350300\sqlite3.exe" less.db
 # SQLite version 3.35.3 2021-03-26 12:12:52
