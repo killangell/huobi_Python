@@ -34,9 +34,15 @@ cost_step_len = 50
 profit_at_least = 200
 # 加仓差价，防止大跌的时候，本金在高位就被耗完
 buy_holding_diff = 300
-# 程序在获取balance的时候，币的数量会四舍五入，获得的数量可能超过实际的数量
-# 防止在卖出的时候，出现卖出数量大于实际数量的错误，所以主动下调一部分数量
-coin_num_correction = 0.000004  # btc,大概1u价值
+
+if symbol == "ethusdt":
+    # 每次买入的金额
+    cost_step_len = 20
+    # 交易会产生各种手续费，至少保证盈利200，否则不卖
+    profit_at_least = 20
+    # 加仓差价，防止大跌的时候，本金在高位就被耗完
+    buy_holding_diff = 30
+
 
 LESSDB_FILE = "less_{0}.db".format(symbol)
 lessdb = Lessdb(LESSDB_FILE)
@@ -107,6 +113,12 @@ class Lessismore:
     def float_xf(self, str='0.1', precision=1):
         return format(float(str), '.{0}f'.format(precision))
 
+    def precision_x(self, str='0.123456789', precision=6):
+        s1 = str
+        s1_list = s1.split('.')
+        s1_new = s1_list[0] + '.' + s1_list[1][:precision]
+        return s1_new
+
     def get_balance(self, symbol='btcusdt'):
         usdt = eth = btc = 0
         account_balance_list = account_client.get_account_balance()
@@ -126,11 +138,9 @@ class Lessismore:
                             if item.currency == 'btc':
                                 btc = item.balance
         if symbol == 'btcusdt':
-            return float(self.float_1f(usdt)), \
-                   (float(self.float_xf(btc, 6)) - coin_num_correction)
+            return float(self.float_1f(usdt)), float(self.precision_x(btc, 6))
         elif symbol == 'ethusdt':
-            return float(self.float_1f(usdt)), \
-                   (float(self.float_xf(eth, 3)) - coin_num_correction)
+            return float(self.float_1f(usdt)), float(self.precision_x(eth, 4))
 
     def reliable_get_balance(self):
         while True:
@@ -155,12 +165,15 @@ class Lessismore:
                                                  order_type=order_type, source=OrderSource.API,
                                                  amount=amount, price=price)
             except HuobiApiException as e:
-                logging.error("reliable_create_order error : " + e.error_message)
+                logging.error("reliable_create_order error : {0}, {1}, {2}".format(order_type, amount, e.error_message))
                 if e.error_message.index("not enough") > 0:
-                    amount -= coin_num_correction
-                    logging.error("reliable_create_order reduce amount to {0}".format(amount))
+                    if symbol == "btcusdt":
+                        amount -= 0.000001
+                    elif symbol == "ethusdt":
+                        amount -= 0.0001
+                    logging.error("reliable_create_order reduce amount to {0}, {1}".format(order_type, amount))
             except Exception as e:
-                logging.error("reliable_create_order error : " + e)
+                logging.error("reliable_create_order error : {0}, {1}, {2}".format(order_type, amount, e))
             time.sleep(2)
 
     def get_time_seconds(self, time_str):

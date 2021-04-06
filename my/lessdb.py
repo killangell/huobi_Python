@@ -131,8 +131,33 @@ class Lessdb:
         cur.close()
         conn.close()
 
+    def update_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE, cost_used=100, cost_average=59453):
+        conn = sqlite3.connect(self._lessdb_file)
+        cur = conn.cursor()
+
+        cur.execute("SELECT * FROM {0} WHERE operation={1} ORDER BY ID DESC LIMIT 1".format(table, operation))
+        # 获取查询结果
+
+        ret = cur.fetchall()
+        for row in ret:
+            print(row)
+        id = ret[0][BTC_OPS_TABLE.ID]
+        print(id)
+
+        cur.execute("UPDATE {0} SET cost_used={1}, cost_average={2} WHERE id={3}".format(table, cost_used, cost_average, id))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+
+        if ret:
+            return ret[0]
+        else:
+            return None
+
 if __name__ == "__main__":
-    lessdb = Lessdb("less.db")
+    lessdb = Lessdb("less_btcusdt.db")
+    # lessdb.update_by_operation()
     lessdb.debug_select_all()
     # LESSDB_FILE_TEST = 'less_test.db'
     # lessdb = Lessdb(LESSDB_FILE_TEST)
