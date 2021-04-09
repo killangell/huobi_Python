@@ -12,10 +12,10 @@ market_client = MarketClient(init_log=True)
 interval = CandlestickInterval.MIN5
 symbol = "btcusdt"
 kline_num = 2000
-smart_holding = True
+smart_holding = False
 money_available = 350
-money_budget_each = 20
-log_file = "{0}_{1}_{2}_{3}_[{4}-{5}].log".format(symbol, interval, kline_num,
+money_budget_each = 5
+log_file = time.strftime('%Y-%m-%d_%H_%M_', time.localtime()) + "{0}_{1}_{2}_{3}_[{4}-{5}].log".format(symbol, interval, kline_num,
                                                   'holding' if smart_holding else 'non-holding',
                                                   money_available, money_budget_each)
 
@@ -119,7 +119,7 @@ class Lessismore:
                             averange_price = bought_used_money / bought_num
                             last_price = global_data.get_close(i)
                             logging.info(
-                                "buy time={0} macd={1} close={2} bought_count={3} bought_money={4} bought_num={5} money_available={6} averange_price={7}".
+                                "buy done time={0} macd={1} close={2} bought_count={3} bought_money={4} bought_num={5} money_available={6} averange_price={7}".
                                     format(global_data.get_timestamp(i), macd_hist_cur, global_data.get_close(i),
                                            bought_count,
                                            bought_used_money, bought_num, money_available, averange_price))
@@ -155,7 +155,7 @@ class Lessismore:
                         averange_price = 0
                         last_price = 0
 
-                        logging.info("sell time={0} macd={1} close={2} profit={3} money_available={4}".format(
+                        logging.info("sell done time={0} macd={1} close={2} profit={3} money_available={4}".format(
                             global_data.get_timestamp(i), macd_hist_cur,
                             global_data.get_close(i), profit, money_available))
                     else:

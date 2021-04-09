@@ -33,7 +33,7 @@ cost_step_len = 50
 # 交易会产生各种手续费，至少保证盈利200，否则不卖
 profit_at_least = 200
 # 加仓差价，防止大跌的时候，本金在高位就被耗完
-buy_holding_diff = 300
+buy_holding_diff = 500
 
 if symbol == "ethusdt":
     # 每次买入的金额
@@ -41,7 +41,7 @@ if symbol == "ethusdt":
     # 交易会产生各种手续费，至少保证盈利200，否则不卖
     profit_at_least = 20
     # 加仓差价，防止大跌的时候，本金在高位就被耗完
-    buy_holding_diff = 30
+    buy_holding_diff = 50
 
 
 LESSDB_FILE = "less_{0}.db".format(symbol)
@@ -211,10 +211,17 @@ class Lessismore:
             return
 
         if (trade_direction_his != trade_direction_cur) or need_moniotr:
+            # 如果上次是 SELL_HOLING 状态 log_throttle 已经不是 0
+            # 在多空转换的时候，如果现在是 BUY_HOLDING 状态，则可能无法打印第一次的log
+            # 所以需要将 log_throttle 清 0
+            if trade_direction_his != trade_direction_cur:
+                log_throttle = 0
+
             usdt = coin_num = 0
             usdt, coin_num = self.reliable_get_balance()
-            logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
-                symbol, usdt, coin_num, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
+            if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+                logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
+                    symbol, usdt, coin_num, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
 
             hist = last_hist
             close = last_close
@@ -230,17 +237,12 @@ class Lessismore:
             first_long_ts = ''
             first_long_price = 0
 
-            # 如果上次是 SELL_HOLING 状态 log_throttle 已经不是 0
-            # 在多空转换的时候，如果现在是 BUY_HOLDING 状态，则可能无法打印第一次的log
-            # 所以需要将 log_throttle 清 0
-            if trade_direction_his != trade_direction_cur:
-                log_throttle = 0
-
             ops1 = lessdb.select_last_one_by_operation(operation=Operation.BUY_DONE)
             ops2 = lessdb.select_last_one_by_operation(operation=Operation.SELL_DONE)
 
             if ops1 and not ops2:
-                logging.info("case 1")
+                if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+                    logging.info("Found BUY_DONE record only")
                 ops = ops1
                 count = ops[BTC_OPS_TABLE.COUNT]
                 cost_used = ops[BTC_OPS_TABLE.COST_USED]
@@ -249,12 +251,15 @@ class Lessismore:
                 num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
                 last_price = ops[BTC_OPS_TABLE.CLOSE]
             if ops1 and ops2:
-                logging.info("case 2")
+                if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+                    logging.info("Found BUY_DONE and SELL_DONE records")
                 buy_done_time_str = ops1[BTC_OPS_TABLE.TIME]
                 sell_down_time_str = ops2[BTC_OPS_TABLE.TIME]
                 buy_done_time = self.get_time_seconds(buy_done_time_str)
                 sell_down_time = self.get_time_seconds(sell_down_time_str)
                 if buy_done_time > sell_down_time:
+                    if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+                        logging.info("BUY_DONE:{0} > SELL_DONE:{1}".format(buy_done_time_str, sell_down_time_str))
                     ops = ops1
                     count = ops[BTC_OPS_TABLE.COUNT]
                     cost_used = ops[BTC_OPS_TABLE.COST_USED]
@@ -263,7 +268,8 @@ class Lessismore:
                     num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
                     last_price = ops[BTC_OPS_TABLE.CLOSE]
             if not ops1 and ops2:
-                logging.info("case 3")
+                if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+                    logging.info("Found SELL_DONE record only")
                 count = 0
                 cost_used = 0
                 cost_average = 0
@@ -332,44 +338,44 @@ class Lessismore:
                         else:
                             cost_average = 0
 
-                        values = [last_ts, Operation.BUY_DONE, hist, close, count, cost_now, cost_used, cost_average,
+                        values = [last_ts, Operation.BUY_DONE, hist, real_time_close, count, cost_now, cost_used, cost_average,
                                   budget_available, num_expected, num_actually, num_holding]
                         lessdb.insert(values=values)
 
                         logging.info(
-                            "BUY_DONE time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                            "BUY_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                             "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, close, count, cost_now, cost_used, cost_average, budget_available,
+                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
                                        num_expected, num_actually, num_holding))
                         need_moniotr = False
                         log_throttle = 0
                     else:
                         if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                            values = [last_ts, Operation.BUY_HOLDING, hist, close, count, cost_now, cost_used,
+                            values = [last_ts, Operation.BUY_HOLDING, hist, real_time_close, count, cost_now, cost_used,
                                       cost_average,
                                       budget_available, num_expected, num_actually, num_holding]
                             lessdb.insert(values=values)
 
                             logging.info(
-                                "BUY_HOLDING time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                                "BUY_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                                 "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                    format(last_ts, hist, close, count, cost_now, cost_used, cost_average,
+                                    format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
                                            budget_available,
                                            num_expected, num_actually, num_holding))
                         need_moniotr = True
                         log_throttle += 1
                 else:
                     if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        values = [last_ts, Operation.ERROR, hist, close, count, cost_now, cost_used, cost_average,
+                        values = [last_ts, Operation.ERROR, hist, real_time_close, count, cost_now, cost_used, cost_average,
                                   budget_available, num_expected, num_actually, num_holding]
                         lessdb.insert(values=values)
 
                         logging.error(
-                            "BUY_ERROR time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                            "BUY_ERROR time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                             "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, close, count, cost_now, cost_used, cost_average, budget_available,
+                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
                                        num_expected, num_actually, num_holding))
-                    need_moniotr = True
+                    need_moniotr = False
                     log_throttle += 1
             # Sell
             elif trade_direction_cur == TradeDirection.SHORT and coin_num > 0.0:
@@ -387,29 +393,29 @@ class Lessismore:
                     cost_used = 0
                     cost_average = 0
 
-                    values = [last_ts, Operation.SELL_DONE, hist, close, count, cost_now, cost_used, cost_average,
+                    values = [last_ts, Operation.SELL_DONE, hist, real_time_close, count, cost_now, cost_used, cost_average,
                               budget_available, num_expected, num_actually, num_holding]
                     lessdb.insert(values=values)
 
                     logging.info(
-                        "SELL_DONE time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                        "SELL_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                         "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                            format(last_ts, hist, close, count, cost_now, cost_used, cost_average, budget_available,
+                            format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
                                    num_expected, num_actually, num_holding))
                     need_moniotr = False
                     log_throttle = 0
 
                 else:
                     if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        values = [last_ts, Operation.SELL_HOLDING, hist, close, count, cost_now, cost_used,
+                        values = [last_ts, Operation.SELL_HOLDING, hist, real_time_close, count, cost_now, cost_used,
                                   cost_average,
                                   budget_available, num_expected, num_actually, num_holding]
                         lessdb.insert(values=values)
 
                         logging.error(
-                            "SELL_HOLDING time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                            "SELL_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                             "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, close, count, cost_now, cost_used, cost_average, budget_available,
+                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
                                        num_expected, num_actually, num_holding))
                     need_moniotr = True
                     log_throttle += 1
