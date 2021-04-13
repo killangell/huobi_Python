@@ -42,7 +42,13 @@ if symbol == "ethusdt":
     profit_at_least = 20
     # 加仓差价，防止大跌的时候，本金在高位就被耗完
     buy_holding_diff = 50
-
+if symbol == "filusdt":
+    # 每次买入的金额
+    cost_step_len = 10
+    # 交易会产生各种手续费，至少保证盈利200，否则不卖
+    profit_at_least = 1
+    # 加仓差价，防止大跌的时候，本金在高位就被耗完
+    buy_holding_diff = 5
 
 LESSDB_FILE = "less_{0}.db".format(symbol)
 lessdb = Lessdb(LESSDB_FILE)
@@ -114,13 +120,15 @@ class Lessismore:
         return format(float(str), '.{0}f'.format(precision))
 
     def precision_x(self, str='0.123456789', precision=6):
+        if str == '0':
+            return 0
         s1 = str
         s1_list = s1.split('.')
         s1_new = s1_list[0] + '.' + s1_list[1][:precision]
         return s1_new
 
     def get_balance(self, symbol='btcusdt'):
-        usdt = eth = btc = 0
+        usdt = eth = btc = fil = 0
         account_balance_list = account_client.get_account_balance()
         if account_balance_list and len(account_balance_list):
             for account_obj in account_balance_list:
@@ -137,10 +145,14 @@ class Lessismore:
                                 eth = item.balance
                             if item.currency == 'btc':
                                 btc = item.balance
+                            if item.currency == 'fil':
+                                fil = item.balance
         if symbol == 'btcusdt':
             return float(self.float_1f(usdt)), float(self.precision_x(btc, 6))
         elif symbol == 'ethusdt':
             return float(self.float_1f(usdt)), float(self.precision_x(eth, 4))
+        elif symbol == 'filusdt':
+            return float(self.float_1f(usdt)), float(self.precision_x(fil, 4))
 
     def reliable_get_balance(self):
         while True:
@@ -170,6 +182,8 @@ class Lessismore:
                     if symbol == "btcusdt":
                         amount -= 0.000001
                     elif symbol == "ethusdt":
+                        amount -= 0.0001
+                    elif symbol == "filusdt":
                         amount -= 0.0001
                     logging.error("reliable_create_order reduce amount to {0}, {1}".format(order_type, amount))
             except Exception as e:
@@ -219,9 +233,6 @@ class Lessismore:
 
             usdt = coin_num = 0
             usdt, coin_num = self.reliable_get_balance()
-            if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
-                    symbol, usdt, coin_num, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
 
             hist = last_hist
             close = last_close
@@ -240,9 +251,14 @@ class Lessismore:
             ops1 = lessdb.select_last_one_by_operation(operation=Operation.BUY_DONE)
             ops2 = lessdb.select_last_one_by_operation(operation=Operation.SELL_DONE)
 
+            if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+                logging.info(time.strftime('%Y-%m-%d_%H_%M_%S', time.localtime()))
+                logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
+                    symbol, usdt, coin_num, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
+                logging.info("ops1={0}".format(ops1))
+                logging.info("ops2={0}".format(ops2))
+
             if ops1 and not ops2:
-                if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                    logging.info("Found BUY_DONE record only")
                 ops = ops1
                 count = ops[BTC_OPS_TABLE.COUNT]
                 cost_used = ops[BTC_OPS_TABLE.COST_USED]
@@ -251,15 +267,11 @@ class Lessismore:
                 num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
                 last_price = ops[BTC_OPS_TABLE.CLOSE]
             if ops1 and ops2:
-                if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                    logging.info("Found BUY_DONE and SELL_DONE records")
                 buy_done_time_str = ops1[BTC_OPS_TABLE.TIME]
                 sell_down_time_str = ops2[BTC_OPS_TABLE.TIME]
                 buy_done_time = self.get_time_seconds(buy_done_time_str)
                 sell_down_time = self.get_time_seconds(sell_down_time_str)
                 if buy_done_time > sell_down_time:
-                    if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        logging.info("BUY_DONE:{0} > SELL_DONE:{1}".format(buy_done_time_str, sell_down_time_str))
                     ops = ops1
                     count = ops[BTC_OPS_TABLE.COUNT]
                     cost_used = ops[BTC_OPS_TABLE.COST_USED]
@@ -267,9 +279,9 @@ class Lessismore:
                     num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
                     num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
                     last_price = ops[BTC_OPS_TABLE.CLOSE]
+                else:
+                    need_moniotr = False
             if not ops1 and ops2:
-                if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                    logging.info("Found SELL_DONE record only")
                 count = 0
                 cost_used = 0
                 cost_average = 0
@@ -432,6 +444,6 @@ if __name__ == "__main__":
                                             symbol, interval))
             lessismore.run()
         except Exception as e:
-            logging.error(e)
+            logging.error("Run exception:" + str(e))
 
         time.sleep(30)
