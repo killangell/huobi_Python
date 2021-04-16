@@ -120,7 +120,7 @@ class Lessismore:
         return format(float(str), '.{0}f'.format(precision))
 
     def precision_x(self, str='0.123456789', precision=6):
-        if str == '0':
+        if str == '0' or str == 0:
             return 0
         s1 = str
         s1_list = s1.split('.')
@@ -147,6 +147,8 @@ class Lessismore:
                                 btc = item.balance
                             if item.currency == 'fil':
                                 fil = item.balance
+        else:
+            return 0, 0
         if symbol == 'btcusdt':
             return float(self.float_1f(usdt)), float(self.precision_x(btc, 6))
         elif symbol == 'ethusdt':
@@ -159,16 +161,20 @@ class Lessismore:
             try:
                 return self.get_balance(symbol)
             except HuobiApiException as e:
-                logging.error("reliable_get_balance error : " + e.error_message)
-            time.sleep(2)
+                logging.error("reliable_get_balance huobi error : " + e.error_message)
+            except Exception as e:
+                logging.error("reliable_get_balance error : " + str(e))
+            time.sleep(5)
 
     def reliable_get_candlestick(self, symbol, period, size=200):
         while True:
             try:
                 return market_client.get_candlestick(symbol, interval, size)
             except HuobiApiException as e:
-                logging.error("reliable_get_candlestick error : " + e.error_message)
-            time.sleep(2)
+                logging.error("reliable_get_candlestick huobi error : " + e.error_message)
+            except Exception as e:
+                logging.error("reliable_get_candlestick error : " + str(e))
+            time.sleep(5)
 
     def reliable_create_order(self, order_type=OrderType.BUY_MARKET, amount=1., price=1.292):
         while True:
@@ -177,7 +183,7 @@ class Lessismore:
                                                  order_type=order_type, source=OrderSource.API,
                                                  amount=amount, price=price)
             except HuobiApiException as e:
-                logging.error("reliable_create_order error : {0}, {1}, {2}".format(order_type, amount, e.error_message))
+                logging.error("reliable_create_order huobi error : {0}, {1}, {2}".format(order_type, amount, e.error_message))
                 if e.error_message.index("not enough") > 0:
                     if symbol == "btcusdt":
                         amount -= 0.000001
@@ -188,7 +194,7 @@ class Lessismore:
                     logging.error("reliable_create_order reduce amount to {0}, {1}".format(order_type, amount))
             except Exception as e:
                 logging.error("reliable_create_order error : {0}, {1}, {2}".format(order_type, amount, e))
-            time.sleep(2)
+            time.sleep(3)
 
     def get_time_seconds(self, time_str):
         time_str_tmp = time_str.replace('_', '')
