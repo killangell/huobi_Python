@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 from enum import IntEnum
@@ -5,6 +6,7 @@ from enum import IntEnum
 import pandas as pd
 
 from huobi.exception.huobi_api_exception import HuobiApiException
+from my.lesscfg import LESS_SYMBOL, LESS_INTERVAL, LESS_STEP_LEN, LESS_LEAST_PROFIT, LESS_HOLDING_DIFF
 from my.lessdb import Lessdb, BTC_OPS_TABLE, Operation
 from my.organized import Organized
 from my.upath import UPath
@@ -26,35 +28,21 @@ class TradeDirection(IntEnum):
     INVALID = 2,
 
 
-symbol = "btcusdt"
-interval = CandlestickInterval.MIN30
-# 每次买入的金额
-cost_step_len = 50
-# 交易会产生各种手续费，至少保证盈利200，否则不卖
-profit_at_least = 200
-# 加仓差价，防止大跌的时候，本金在高位就被耗完
-buy_holding_diff = 500
+symbol = LESS_SYMBOL
+interval = LESS_INTERVAL
+cost_step_len = LESS_STEP_LEN
+profit_at_least = LESS_LEAST_PROFIT
+buy_holding_diff = LESS_HOLDING_DIFF
 
-if symbol == "ethusdt":
-    # 每次买入的金额
-    cost_step_len = 20
-    # 交易会产生各种手续费，至少保证盈利200，否则不卖
-    profit_at_least = 20
-    # 加仓差价，防止大跌的时候，本金在高位就被耗完
-    buy_holding_diff = 50
-if symbol == "filusdt":
-    # 每次买入的金额
-    cost_step_len = 10
-    # 交易会产生各种手续费，至少保证盈利200，否则不卖
-    profit_at_least = 1
-    # 加仓差价，防止大跌的时候，本金在高位就被耗完
-    buy_holding_diff = 5
+print("symbol = ", symbol)
+print("interval = ", interval)
+print("cost_step_len = ", cost_step_len)
+print("profit_at_least = ", profit_at_least)
+print("buy_holding_diff = ", buy_holding_diff)
 
 LESSDB_FILE = "less_{0}.db".format(symbol)
+print("LESSDB_FILE = " + LESSDB_FILE)
 lessdb = Lessdb(LESSDB_FILE)
-
-log_file = "lessismore_{0}.log".format(symbol)
-log_backup_file = "{0}.backup".format(log_file)
 
 trade_direction_his = TradeDirection.INVALID
 trade_direction_cur = TradeDirection.INVALID
@@ -72,13 +60,12 @@ class Lessismore:
         pass
 
     def init_log(self):
-        # backup a log copy, in case any error would be overwritten in a new run
-        if UPath.is_file_exists(log_backup_file):
-            UPath.remove(log_backup_file)
-
-        if UPath.is_file_exists(log_file):
-            UPath.rename(log_file, log_backup_file)
-
+        log_path = 'logs'
+        if not os.path.exists(log_path):
+            os.makedirs(log_path)
+        log_file = log_path + '\/'  + symbol + '_' + time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time()))
+        log_file += '.log'
+        print('log_file = ', log_file)
         logging.basicConfig(level=logging.INFO,  # 控制台打印的日志级别
                             filename=log_file,
                             filemode='w',  ##模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
@@ -183,7 +170,8 @@ class Lessismore:
                                                  order_type=order_type, source=OrderSource.API,
                                                  amount=amount, price=price)
             except HuobiApiException as e:
-                logging.error("reliable_create_order huobi error : {0}, {1}, {2}".format(order_type, amount, e.error_message))
+                logging.error(
+                    "reliable_create_order huobi error : {0}, {1}, {2}".format(order_type, amount, e.error_message))
                 if e.error_message.index("not enough") > 0:
                     if symbol == "btcusdt":
                         amount -= 0.000001
@@ -356,14 +344,16 @@ class Lessismore:
                         else:
                             cost_average = 0
 
-                        values = [last_ts, Operation.BUY_DONE, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                        values = [last_ts, Operation.BUY_DONE, hist, real_time_close, count, cost_now, cost_used,
+                                  cost_average,
                                   budget_available, num_expected, num_actually, num_holding]
                         lessdb.insert(values=values)
 
                         logging.info(
                             "BUY_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                             "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
+                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                                       budget_available,
                                        num_expected, num_actually, num_holding))
                         need_moniotr = False
                         log_throttle = 0
@@ -384,14 +374,16 @@ class Lessismore:
                         log_throttle += 1
                 else:
                     if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        values = [last_ts, Operation.ERROR, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                        values = [last_ts, Operation.ERROR, hist, real_time_close, count, cost_now, cost_used,
+                                  cost_average,
                                   budget_available, num_expected, num_actually, num_holding]
                         lessdb.insert(values=values)
 
                         logging.error(
                             "BUY_ERROR time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                             "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
+                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                                       budget_available,
                                        num_expected, num_actually, num_holding))
                     need_moniotr = False
                     log_throttle += 1
@@ -411,14 +403,16 @@ class Lessismore:
                     cost_used = 0
                     cost_average = 0
 
-                    values = [last_ts, Operation.SELL_DONE, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                    values = [last_ts, Operation.SELL_DONE, hist, real_time_close, count, cost_now, cost_used,
+                              cost_average,
                               budget_available, num_expected, num_actually, num_holding]
                     lessdb.insert(values=values)
 
                     logging.info(
                         "SELL_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                         "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                            format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
+                            format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                                   budget_available,
                                    num_expected, num_actually, num_holding))
                     need_moniotr = False
                     log_throttle = 0
@@ -432,9 +426,10 @@ class Lessismore:
 
                         logging.error(
                             "SELL_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                            "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average, budget_available,
-                                       num_expected, num_actually, num_holding))
+                            "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11}".
+                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
+                                       budget_available,
+                                       num_expected, num_actually, num_holding, cost_average + profit_at_least))
                     need_moniotr = True
                     log_throttle += 1
             trade_direction_his = trade_direction_cur
