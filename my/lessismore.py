@@ -1,4 +1,4 @@
-import os
+import os, shutil
 import time
 import logging
 from enum import IntEnum
@@ -63,9 +63,14 @@ class Lessismore:
         log_path = 'logs'
         if not os.path.exists(log_path):
             os.makedirs(log_path)
-        log_file = log_path + '\/'  + symbol + '_' + time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time()))
-        log_file += '.log'
-        print('log_file = ', log_file)
+        log_file_backup = log_path + '\/'  + symbol + '_' + time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time()))
+        log_file_backup += '.log'
+
+        log_file = "lessismore_" + symbol + ".log"
+        if os.path.exists(log_file):
+            print('log_file_backup = ', log_file_backup)
+            shutil.move(log_file, log_file_backup)
+
         logging.basicConfig(level=logging.INFO,  # 控制台打印的日志级别
                             filename=log_file,
                             filemode='w',  ##模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
