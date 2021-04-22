@@ -6,7 +6,7 @@ from enum import IntEnum
 import pandas as pd
 
 from huobi.exception.huobi_api_exception import HuobiApiException
-from my.lesscfg import LESS_SYMBOL, LESS_INTERVAL, LESS_STEP_LEN, LESS_LEAST_PROFIT, LESS_HOLDING_DIFF
+from my.lesscfg import LESS_SYMBOL, LESS_INTERVAL, LESS_STEP_LEN, LESS_LEAST_PROFIT, LESS_HOLDING_DIFF, LESS_PEAK_DIFF
 from my.lessdb import Lessdb, BTC_OPS_TABLE, Operation
 from my.organized import Organized
 from my.upath import UPath
@@ -46,7 +46,7 @@ lessdb = Lessdb(LESSDB_FILE)
 
 trade_direction_his = TradeDirection.INVALID
 trade_direction_cur = TradeDirection.INVALID
-LOG_THROTTLE_COUNT = 20
+LOG_THROTTLE_COUNT = 40
 log_throttle = 0
 
 # 该买的时候，监控获得一个低于 average 的价格买入
@@ -57,8 +57,19 @@ need_moniotr = True
 
 class Lessismore:
     def __init__(self):
-        pass
-
+        self._last_ts = ''
+        self._hist = 0
+        self._count = 0
+        self._cost_now = cost_step_len
+        self._cost_used = 0
+        self._cost_average = 0
+        self._num_expected = 0
+        self._num_actually = 0
+        self._num_holding = 0
+        self._budget_available = 0
+        self._real_time_close = 0
+        self._last_price = 0
+        
     def init_log(self):
         log_path = 'logs'
         if not os.path.exists(log_path):
@@ -194,6 +205,126 @@ class Lessismore:
         time1_str_tmp_int = time.strptime(time_str_tmp, '%Y%m%d%H%M%S')
         return time.mktime(time1_str_tmp_int)
 
+    def buy_done(self):
+        # Buy 操作
+        order_id = self.reliable_create_order(order_type=OrderType.BUY_MARKET, amount=self._cost_now,
+                                              price=1.292)
+        # 更新记录
+        usdt, coin_num = self.reliable_get_balance()
+
+        self._count += 1
+        self._budget_available = usdt
+        self._num_expected = self._cost_now / self._real_time_close
+        self._num_holding = coin_num
+        self._cost_used += self._cost_now
+        if self._num_holding > 0.0:
+            self._cost_average = self._cost_used / self._num_holding
+        else:
+            self._cost_average = 0
+
+        values = [self._last_ts, Operation.BUY_DONE, self._hist, self._real_time_close, self._count, self._cost_now, self._cost_used,
+                  self._cost_average,
+                  self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+        lessdb.insert(values=values)
+
+        logging.info(
+            "BUY_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+            "budget_available={7} num_expected={8} actually={9} num_holding={10}".
+                format(self._last_ts, self._hist, self._real_time_close, self._count, self._cost_now, self._cost_used, self._cost_average,
+                       self._budget_available,
+                       self._num_expected, self._num_actually, self._num_holding))
+
+    def buy_holding(self):
+        if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+            values = [self._last_ts, Operation.BUY_HOLDING, self._hist, self._real_time_close, self._count,
+                      self._cost_now, self._cost_used,
+                      self._cost_average,
+                      self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+            lessdb.insert(values=values)
+
+            logging.info(
+                "BUY_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11}".
+                    format(self._last_ts, self._hist, self._real_time_close, self._count, self._cost_now,
+                           self._cost_used, self._cost_average,
+                           self._budget_available,
+                           self._num_expected, self._num_actually, self._num_holding, self._last_price - buy_holding_diff))
+
+    def buy_error(self):
+        if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+            values = [self._last_ts, Operation.ERROR, self._hist, self._real_time_close, self._count, self._cost_now,
+                      self._cost_used,
+                      self._cost_average,
+                      self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+            lessdb.insert(values=values)
+
+            logging.error(
+                "BUY_ERROR time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
+                    format(self._last_ts, self._hist, self._real_time_close, self._count, self._cost_now,
+                           self._cost_used, self._cost_average,
+                           self._budget_available,
+                           self._num_expected, self._num_actually, self._num_holding))
+
+    def sell_done(self):
+        order_id = self.reliable_create_order(order_type=OrderType.SELL_MARKET, amount=self._num_holding,
+                                              price=1.292)
+
+        usdt, coin_num = self.reliable_get_balance()
+        self.set_running_data(usdt=usdt, coin_num=0, ops=None)
+
+        values = [self._last_ts, Operation.SELL_DONE, self._hist, self._real_time_close, self._count, self._cost_now,
+                  self._cost_used,
+                  self._cost_average,
+                  self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+        lessdb.insert(values=values)
+
+        logging.info(
+            "SELL_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+            "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
+                format(self._last_ts, self._hist, self._real_time_close, self._count, self._cost_now, self._cost_used,
+                       self._cost_average,
+                       self._budget_available,
+                       self._num_expected, self._num_actually, self._num_holding))
+
+    def sell_holding(self):
+        if (log_throttle % LOG_THROTTLE_COUNT) == 0:
+            values = [self._last_ts, Operation.SELL_HOLDING, self._hist, self._real_time_close, self._count,
+                      self._cost_now, self._cost_used,
+                      self._cost_average,
+                      self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+            lessdb.insert(values=values)
+
+            logging.error(
+                "SELL_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11}".
+                    format(self._last_ts, self._hist, self._real_time_close, self._count, self._cost_now,
+                           self._cost_used, self._cost_average,
+                           self._budget_available,
+                           self._num_expected, self._num_actually, self._num_holding,
+                           self._cost_average + profit_at_least))
+
+    def set_running_data(self, usdt=None, coin_num=None, ops=None):
+        self._cost_now = cost_step_len
+        if usdt:
+            self._budget_available = usdt
+        if coin_num:
+            self._num_holding = coin_num
+        if ops:
+            self._count = ops[BTC_OPS_TABLE.COUNT]
+            self._cost_used = ops[BTC_OPS_TABLE.COST_USED]
+            self._cost_average = ops[BTC_OPS_TABLE.COST_AVERAGE]
+            self._num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
+            self._num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
+            self._last_price = ops[BTC_OPS_TABLE.CLOSE]
+        else:
+            self._count = 0
+            self._cost_used = 0
+            self._cost_average = 0
+            self._num_expected = 0
+            self._num_actually = 0
+            self._last_price = 0
+
     def run(self):
         global trade_direction_cur
         global trade_direction_his
@@ -209,11 +340,9 @@ class Lessismore:
         global_data.calculate_macd()
 
         last_index = global_data.get_len() - 2
-        last_hist = global_data.get_hist(last_index)
-        last_hist_pre = global_data.get_hist(last_index - 1)
-        last_ts = global_data.get_timestamp(last_index)
-        last_close = global_data.get_close(last_index)
-        real_time_close = global_data.get_close(global_data.get_len() - 1)
+        self._hist = last_hist = global_data.get_hist(last_index)
+        self._last_ts = global_data.get_timestamp(last_index)
+        self._real_time_close = global_data.get_close(global_data.get_len() - 1)
 
         if last_hist > 0:
             trade_direction_cur = TradeDirection.LONG
@@ -230,63 +359,36 @@ class Lessismore:
             if trade_direction_his != trade_direction_cur:
                 log_throttle = 0
 
-            usdt = coin_num = 0
             usdt, coin_num = self.reliable_get_balance()
+            self.set_running_data(usdt=usdt, coin_num=coin_num, ops=None)
 
-            hist = last_hist
-            close = last_close
-            count = 0
-            cost_now = cost_step_len
-            cost_used = 0
-            cost_average = 0
-            num_expected = 0
-            num_actually = 0
-            num_holding = coin_num
-            budget_available = usdt
-            last_price = 0  # 最后执行 BUY_DONE 的价格
             first_long_ts = ''
             first_long_price = 0
 
-            ops1 = lessdb.select_last_one_by_operation(operation=Operation.BUY_DONE)
-            ops2 = lessdb.select_last_one_by_operation(operation=Operation.SELL_DONE)
+            ops_buy_done = lessdb.select_last_one_by_operation(operation=Operation.BUY_DONE)
+            ops_sell_done = lessdb.select_last_one_by_operation(operation=Operation.SELL_DONE)
 
             if (log_throttle % LOG_THROTTLE_COUNT) == 0:
                 logging.info(time.strftime('%Y-%m-%d_%H_%M_%S', time.localtime()))
                 logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
                     symbol, usdt, coin_num, 'long' if trade_direction_cur == TradeDirection.LONG else 'short'))
-                logging.info("ops1={0}".format(ops1))
-                logging.info("ops2={0}".format(ops2))
+                logging.info("ops_buy_done={0}".format(ops_buy_done))
+                logging.info("ops_sell_done={0}".format(ops_sell_done))
 
-            if ops1 and not ops2:
-                ops = ops1
-                count = ops[BTC_OPS_TABLE.COUNT]
-                cost_used = ops[BTC_OPS_TABLE.COST_USED]
-                cost_average = ops[BTC_OPS_TABLE.COST_AVERAGE]
-                num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
-                num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
-                last_price = ops[BTC_OPS_TABLE.CLOSE]
-            if ops1 and ops2:
-                buy_done_time_str = ops1[BTC_OPS_TABLE.TIME]
-                sell_down_time_str = ops2[BTC_OPS_TABLE.TIME]
+            if ops_buy_done and not ops_sell_done:
+                self.set_running_data(ops=ops_buy_done)
+            if ops_buy_done and ops_sell_done:
+                buy_done_time_str = ops_buy_done[BTC_OPS_TABLE.TIME]
+                sell_down_time_str = ops_sell_done[BTC_OPS_TABLE.TIME]
                 buy_done_time = self.get_time_seconds(buy_done_time_str)
                 sell_down_time = self.get_time_seconds(sell_down_time_str)
                 if buy_done_time > sell_down_time:
-                    ops = ops1
-                    count = ops[BTC_OPS_TABLE.COUNT]
-                    cost_used = ops[BTC_OPS_TABLE.COST_USED]
-                    cost_average = ops[BTC_OPS_TABLE.COST_AVERAGE]
-                    num_expected = ops[BTC_OPS_TABLE.NUM_EXPECTED]
-                    num_actually = ops[BTC_OPS_TABLE.NUM_ACTUALLY]
-                    last_price = ops[BTC_OPS_TABLE.CLOSE]
+                    self.set_running_data(ops=ops_buy_done)
                 else:
+                    self.set_running_data()
                     need_moniotr = False
-            if not ops1 and ops2:
-                count = 0
-                cost_used = 0
-                cost_average = 0
-                num_expected = 0
-                num_actually = 0
-                last_price = 0
+            if not ops_buy_done and ops_sell_done:
+                self.set_running_data()
                 need_moniotr = False
 
             # Buy
@@ -295,18 +397,10 @@ class Lessismore:
                 # 如果查询数据库里最近一次买的时间大于等于本周期内第一次变成绿柱的时间，则说明已经买过了
                 # 如果当前不是第一个绿柱，则找到第一个绿柱
                 # 如果当前收盘价格低于第一个绿柱，则是买入好时机，否则不操作
-                # if last_hist_pre > 0:
-                i = global_data.get_len() - 2
-                while i > 0:
-                    hist_tmp = global_data.get_hist(i)
-                    if hist_tmp < 0:
-                        # 第一个绿柱位置
-                        i += 1
-                        break
-                    i -= 1
-                first_long_ts = global_data.get_timestamp(i)
-                first_long_price = global_data.get_close(i)
-                ops = ops1
+                pos = global_data.get_latest_first_hist_position(long=True)
+                first_long_ts = global_data.get_timestamp(pos)
+                first_long_price = global_data.get_close(pos)
+                ops = ops_buy_done
                 if ops:
                     last_buy_done_time = ops[BTC_OPS_TABLE.TIME]
                     if last_buy_done_time:
@@ -318,125 +412,60 @@ class Lessismore:
                                 "Already bought in this period on last_buy_done_tim={0}, first_long_time={1}".format(
                                     last_buy_done_time, first_long_ts))
                             logging.info(
-                                "BUY_GIVEUP time={0} hist={1} close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
+                                "BUY_GIVEUP time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
                                 "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                    format(last_ts, hist, close, count, cost_now, cost_used, cost_average,
-                                           budget_available,
-                                           num_expected, num_actually, num_holding))
+                                    format(self._last_ts, self._hist, self._real_time_close, self._count, self._cost_now, self._cost_used, self._cost_average,
+                                           self._budget_available,
+                                           self._num_expected, self._num_actually, self._num_holding))
 
                             trade_direction_his = trade_direction_cur
                             need_moniotr = False
                             log_throttle = 0
                             return
 
-                if budget_available > cost_now:
+                if self._budget_available > self._cost_now:
                     # 查询上次买入价格，如果当前收盘价格低于上次买入价格，则加仓
-                    if (last_price == 0 and real_time_close < first_long_price) or \
-                            (last_price > 0 and (last_price - real_time_close >= buy_holding_diff)):
-                        # Buy 操作
-                        order_id = self.reliable_create_order(order_type=OrderType.BUY_MARKET, amount=cost_now,
-                                                              price=1.292)
-                        # 更新记录
-                        usdt, coin_num = self.reliable_get_balance()
-
-                        count += 1
-                        budget_available = usdt
-                        num_expected = cost_now / (last_close + 200)  # Market 价格一般高于收盘价，误差200
-                        num_holding = coin_num
-                        cost_used += cost_now
-                        if num_holding > 0.0:
-                            cost_average = cost_used / num_holding
-                        else:
-                            cost_average = 0
-
-                        values = [last_ts, Operation.BUY_DONE, hist, real_time_close, count, cost_now, cost_used,
-                                  cost_average,
-                                  budget_available, num_expected, num_actually, num_holding]
-                        lessdb.insert(values=values)
-
-                        logging.info(
-                            "BUY_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                            "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
-                                       budget_available,
-                                       num_expected, num_actually, num_holding))
+                    if (self._last_price == 0 and self._real_time_close < first_long_price) or \
+                            (self._last_price > 0 and (self._last_price - self._real_time_close >= buy_holding_diff)):
+                        self.buy_done()
                         need_moniotr = False
                         log_throttle = 0
                     else:
-                        if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                            values = [last_ts, Operation.BUY_HOLDING, hist, real_time_close, count, cost_now, cost_used,
-                                      cost_average,
-                                      budget_available, num_expected, num_actually, num_holding]
-                            lessdb.insert(values=values)
-
-                            logging.info(
-                                "BUY_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                                "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                    format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
-                                           budget_available,
-                                           num_expected, num_actually, num_holding))
+                        self.buy_holding()
                         need_moniotr = True
                         log_throttle += 1
                 else:
-                    if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        values = [last_ts, Operation.ERROR, hist, real_time_close, count, cost_now, cost_used,
-                                  cost_average,
-                                  budget_available, num_expected, num_actually, num_holding]
-                        lessdb.insert(values=values)
-
-                        logging.error(
-                            "BUY_ERROR time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                            "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
-                                       budget_available,
-                                       num_expected, num_actually, num_holding))
+                    self.buy_error()
                     need_moniotr = False
                     log_throttle += 1
             # Sell
-            elif trade_direction_cur == TradeDirection.SHORT and coin_num > 0.0:
-                # 有利润才 sell
-                if real_time_close - cost_average > profit_at_least:
-                    order_id = self.reliable_create_order(order_type=OrderType.SELL_MARKET, amount=coin_num,
-                                                          price=1.292)
+            elif trade_direction_cur == TradeDirection.SHORT:
+                if coin_num > 0.0:
+                    # 有利润才 sell
+                    if self._real_time_close - self._cost_average > profit_at_least:
+                        self.sell_done()
+                    else:
+                        self.sell_holding()
 
-                    usdt, coin_num = self.reliable_get_balance()
-
-                    count = 0
-                    budget_available = usdt
-                    num_expected = 0
-                    num_holding = 0
-                    cost_used = 0
-                    cost_average = 0
-
-                    values = [last_ts, Operation.SELL_DONE, hist, real_time_close, count, cost_now, cost_used,
-                              cost_average,
-                              budget_available, num_expected, num_actually, num_holding]
-                    lessdb.insert(values=values)
-
-                    logging.info(
-                        "SELL_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                        "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                            format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
-                                   budget_available,
-                                   num_expected, num_actually, num_holding))
-                    need_moniotr = False
-                    log_throttle = 0
-
+                    # 接针
+                    if self._last_price - self._real_time_close >= LESS_PEAK_DIFF:
+                        if self._budget_available > self._cost_now:
+                            logging.info("buy at peak 1 real_time_close={0} last_price={1} peak_diff={2}".format(
+                                self._real_time_close, self._last_price, LESS_PEAK_DIFF))
+                            self.buy_done()
                 else:
-                    if (log_throttle % LOG_THROTTLE_COUNT) == 0:
-                        values = [last_ts, Operation.SELL_HOLDING, hist, real_time_close, count, cost_now, cost_used,
-                                  cost_average,
-                                  budget_available, num_expected, num_actually, num_holding]
-                        lessdb.insert(values=values)
+                    # 接针
+                    pos = global_data.get_latest_first_hist_position(long=False)
+                    price = global_data.get_close(pos)
+                    if price - self._real_time_close >= LESS_PEAK_DIFF:
+                        if self._budget_available > self._cost_now:
+                            logging.info("buy at peak 2 real_time_close={0} last_price={1} peak_diff={2}".format(
+                                self._real_time_close, self._last_price, LESS_PEAK_DIFF))
+                            self.buy_done()
 
-                        logging.error(
-                            "SELL_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                            "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11}".
-                                format(last_ts, hist, real_time_close, count, cost_now, cost_used, cost_average,
-                                       budget_available,
-                                       num_expected, num_actually, num_holding, cost_average + profit_at_least))
-                    need_moniotr = True
-                    log_throttle += 1
+                need_moniotr = True
+                log_throttle += 1
+
             trade_direction_his = trade_direction_cur
 
 

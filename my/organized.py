@@ -57,6 +57,21 @@ class Organized:
         self._hist_list = macd_hist
         return macd, macd_signal, macd_hist
 
+    def get_latest_first_hist_position(self, long=True):
+        i = self.get_len() - 2
+        while i > 0:
+            hist_tmp = self.get_hist(i)
+            if (long and hist_tmp < 0) or (not long and hist_tmp > 0):
+                # <0 第一个绿柱位置; >0 第一个红柱位置
+                i += 1
+                break
+            i -= 1
+
+        if i > 0:
+            return i
+        else:
+            return 0
+
     @property
     def ema_list(self):
         return self._ema_list
