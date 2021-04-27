@@ -6,9 +6,9 @@ from my.upath import UPath
 class Operation(IntEnum):
     BUY_DONE = 0,
     BUY_HOLDING = 1,
-    SELL_DONE = 2,
-    SELL_HOLDING = 3,
-    ERROR = 4,
+    BUY_ERROR = 2,
+    SELL_DONE = 3,
+    SELL_HOLDING = 4
 
 
 class BTC_OPS_TABLE(IntEnum):
@@ -132,7 +132,7 @@ class Lessdb:
         cur.close()
         conn.close()
 
-    def update_by_operation(self, table='BTC_OPS', operation=Operation.BUY_HOLDING, cost_used=50, cost_average=61200):
+    def update_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE, cost_used=400, cost_average=55430):
         conn = sqlite3.connect(self._lessdb_file)
         cur = conn.cursor()
 

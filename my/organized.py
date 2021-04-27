@@ -13,6 +13,10 @@ class Organized:
         self._hist_list = []  # MACD
         self._ma_list = [[0 * 60000]] * 500
         self._ema_list = [[0 * 60000]] * 500
+        self._slowk_list = []
+        self._slowd_list = []
+        self._fastk_list = []
+        self._fastd_list = []
 
     def get_len(self):
         return len(self._id_list)
@@ -44,6 +48,18 @@ class Organized:
     def get_ma(self, period, index):
         return self._ma_list[period][index]
 
+    def get_slowk(self, index):
+        return self._slowk_list[index]
+
+    def get_slowd(self, index):
+        return self._slowd_list[index]
+
+    def get_fastk(self, index):
+        return self._fastk_list[index]
+
+    def get_fastd(self, index):
+        return self._fastd_list[index]
+
     def calculate_ema(self, xma_period):
         xma_list = talib.EMA(np.array(self._close_list), timeperiod=xma_period)
         self._ema_list[xma_period] = xma_list
@@ -57,8 +73,36 @@ class Organized:
         self._hist_list = macd_hist
         return macd, macd_signal, macd_hist
 
+    def calculate_kdj(self):
+        self._slowk_list, self._slowd_list = talib.STOCH(np.array(self._high_list),
+                                                         np.array(self._low_list),
+                                                         np.array(self._close_list),
+                                                         fastk_period=9,
+                                                         slowk_period=3,
+                                                         slowk_matype=0,
+                                                         slowd_period=3,
+                                                         slowd_matype=0)
+
+    def calculate_stochrsi(self):
+        self._fastk_list, self._fastd_list = talib.STOCHRSI(
+            np.array(self._close_list), timeperiod=14, fastk_period=3, fastd_period=3, fastd_matype=0)
+
     def get_latest_first_hist_position(self, long=True):
         i = self.get_len() - 2
+        # 如果当前趋势为 short，查找第一个long的位置，需要排除当前所有的空头k线
+        if long:
+            if self.get_hist(i) < 0:
+                while i > 0:
+                    if self.get_hist(i) > 0:
+                        break
+                    i -= 1
+        # 如果当前趋势为 long，查找第一个short的位置，需要排除当前所有的多头k线
+        else:
+            if self.get_hist(i) > 0:
+                while i > 0:
+                    if self.get_hist(i) < 0:
+                        break
+                    i -= 1
         while i > 0:
             hist_tmp = self.get_hist(i)
             if (long and hist_tmp < 0) or (not long and hist_tmp > 0):
@@ -103,6 +147,3 @@ class Organized:
     @property
     def timestamp(self):
         return self._timestamp
-
-
-
