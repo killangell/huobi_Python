@@ -32,6 +32,7 @@ interval = LESS_INTERVAL
 LOG_THROTTLE_COUNT = 40
 LESSDB_FILE = "less_{0}.db".format(symbol)
 
+
 class Lessismore:
     def __init__(self):
         self._real_time_ts = ''
@@ -222,7 +223,8 @@ class Lessismore:
         else:
             self._cost_average = 0
 
-        values = [self._real_time_ts, Operation.BUY_DONE, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
+        values = [self._real_time_ts, Operation.BUY_DONE, self._real_time_hist, self._real_time_close, self._count,
+                  self._cost_now,
                   self._cost_used,
                   self._cost_average,
                   self._budget_available, self._num_expected, self._num_actually, self._num_holding]
@@ -231,14 +233,16 @@ class Lessismore:
         logging.info(
             "BUY_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
             "budget_available={7} num_expected={8} actually={9} num_holding={10}".
-                format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now, self._cost_used,
+                format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
+                       self._cost_used,
                        self._cost_average,
                        self._budget_available,
                        self._num_expected, self._num_actually, self._num_holding))
 
-    def buy_holding(self):
+    def buy_holding(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._real_time_ts, Operation.BUY_HOLDING, self._real_time_hist, self._real_time_close, self._count,
+            values = [self._real_time_ts, Operation.BUY_HOLDING, self._real_time_hist, self._real_time_close,
+                      self._count,
                       self._cost_now, self._cost_used,
                       self._cost_average,
                       self._budget_available, self._num_expected, self._num_actually, self._num_holding]
@@ -246,16 +250,17 @@ class Lessismore:
 
             logging.info(
                 "BUY_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11}".
+                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11} next_usdt={12}".
                     format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
                            self._cost_used, self._cost_average,
                            self._budget_available,
                            self._num_expected, self._num_actually, self._num_holding,
-                           self._last_price - self._buy_holding_diff))
+                           self._last_price - self._buy_holding_diff, next_usdt))
 
-    def buy_error(self):
+    def buy_error(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._real_time_ts, Operation.ERROR, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
+            values = [self._real_time_ts, Operation.ERROR, self._real_time_hist, self._real_time_close, self._count,
+                      self._cost_now,
                       self._cost_used,
                       self._cost_average,
                       self._budget_available, self._num_expected, self._num_actually, self._num_holding]
@@ -263,11 +268,10 @@ class Lessismore:
 
             logging.error(
                 "BUY_ERROR time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
+                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} next_usdt={11}".
                     format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
-                           self._cost_used, self._cost_average,
-                           self._budget_available,
-                           self._num_expected, self._num_actually, self._num_holding))
+                           self._cost_used, self._cost_average, self._budget_available,
+                           self._num_expected, self._num_actually, self._num_holding, next_usdt))
 
     def sell_done(self):
         order_id = self.reliable_create_order(order_type=OrderType.SELL_MARKET, amount=self._num_holding,
@@ -276,7 +280,8 @@ class Lessismore:
         usdt_available, coin_available = self.reliable_get_balance()
         self.set_running_data(usdt=usdt_available, coin_num=0, ops=None)
 
-        values = [self._real_time_ts, Operation.SELL_DONE, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
+        values = [self._real_time_ts, Operation.SELL_DONE, self._real_time_hist, self._real_time_close, self._count,
+                  self._cost_now,
                   self._cost_used,
                   self._cost_average,
                   self._budget_available, self._num_expected, self._num_actually, self._num_holding]
@@ -285,14 +290,16 @@ class Lessismore:
         logging.info(
             "SELL_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
             "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now, self._cost_used,
+                format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
+                       self._cost_used,
                        self._cost_average,
                        self._budget_available,
                        self._num_expected, self._num_actually, self._num_holding))
 
     def sell_holding(self):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._real_time_ts, Operation.SELL_HOLDING, self._real_time_hist, self._real_time_close, self._count,
+            values = [self._real_time_ts, Operation.SELL_HOLDING, self._real_time_hist, self._real_time_close,
+                      self._count,
                       self._cost_now, self._cost_used,
                       self._cost_average,
                       self._budget_available, self._num_expected, self._num_actually, self._num_holding]
@@ -334,17 +341,17 @@ class Lessismore:
     def try_buy(self, condition=None):
         if condition is None:
             condition = True
-        usdt = float(self.get_next_usdt())
-        if self._budget_available > usdt:
-            if condition:
-                self.buy_done(usdt)
+        next_usdt = float(self.get_next_usdt())
+        if condition:
+            if self._budget_available > next_usdt:
+                self.buy_done(next_usdt)
                 return Operation.BUY_DONE
             else:
-                self.buy_holding()
-                return Operation.BUY_HOLDING
+                self.buy_error(next_usdt)
+                return Operation.BUY_ERROR
         else:
-            self.buy_error()
-            return Operation.BUY_ERROR
+            self.buy_holding(next_usdt)
+            return Operation.BUY_HOLDING
 
     def try_sell(self, condition=None):
         if condition is None:
@@ -413,7 +420,8 @@ class Lessismore:
             if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
                 logging.info(time.strftime('%Y-%m-%d_%H_%M_%S', time.localtime()))
                 logging.info("symbol={0} usdt={1} coin_num={2} dir={3}".format(
-                    symbol, usdt_available, coin_available, 'long' if self._trade_direction_cur == LessTradeDirection.LONG else 'short'))
+                    symbol, usdt_available, coin_available,
+                    'long' if self._trade_direction_cur == LessTradeDirection.LONG else 'short'))
                 logging.info("ops_buy_done={0}".format(ops_buy_done))
                 logging.info("ops_sell_done={0}".format(ops_sell_done))
 
@@ -501,16 +509,18 @@ class Lessismore:
 
                     # 接针
                     if self._last_price - self._real_time_close >= LESS_PEAK_DIFF:
-                        logging.info("Add position at peak price real_time_close={0} last_price={1} peak_diff={2}".format(
-                            self._real_time_close, self._last_price, LESS_PEAK_DIFF))
+                        logging.info(
+                            "Add position at peak price real_time_close={0} last_price={1} peak_diff={2}".format(
+                                self._real_time_close, self._last_price, LESS_PEAK_DIFF))
                         self.try_buy()
                 else:
                     # 接针
                     pos = global_data.get_latest_first_hist_position(long=False)
                     price = global_data.get_close(pos)
                     if price - self._real_time_close >= LESS_PEAK_DIFF:
-                        logging.info("Open position at peak price real_time_close={0} last_price={1} peak_diff={2}".format(
-                            self._real_time_close, self._last_price, LESS_PEAK_DIFF))
+                        logging.info(
+                            "Open position at peak price real_time_close={0} last_price={1} peak_diff={2}".format(
+                                self._real_time_close, self._last_price, LESS_PEAK_DIFF))
                         self.try_buy()
 
                 self._need_monitor = True

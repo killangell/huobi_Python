@@ -17,7 +17,7 @@ if lesscfg_category == LessCfgCategory.BTC:
     # 交易的周期
     LESS_INTERVAL = CandlestickInterval.MIN30
     # 每次买入的金额
-    LESS_STEP_LEN = 50
+    LESS_STEP_LEN = 30
     # 交易会产生各种手续费，至少保证盈利200，否则不卖
     LESS_LEAST_PROFIT = 200
     # 加仓差价，防止大跌的时候，本金在高位就被耗完

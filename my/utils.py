@@ -49,7 +49,7 @@ if __name__ == "__main__":
     print(Utils.precision_x("20", 2))
     print(Utils.precision_x("20.0", 4))
 
-    list = Utils.get_list_of_arit_seq(15, 10, 202)
+    list = Utils.get_list_of_arit_seq(30, 10, 415)
     print(list)
     sn = 0
     for i in range(0, len(list)):
