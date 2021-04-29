@@ -35,8 +35,10 @@ LESSDB_FILE = "less_{0}.db".format(symbol)
 
 class Lessismore:
     def __init__(self):
-        self._real_time_ts = ''
-        self._real_time_hist = 0
+        self._cur_hist = 0
+        self._cur_timestamp = ''
+        self._cur_close = 0
+        #
         self._count = 0
         self._cost_now = LESS_STEP_LEN
         self._cost_used = 0
@@ -223,7 +225,7 @@ class Lessismore:
         else:
             self._cost_average = 0
 
-        values = [self._real_time_ts, Operation.BUY_DONE, self._real_time_hist, self._real_time_close, self._count,
+        values = [self._cur_timestamp, Operation.BUY_DONE, self._cur_hist, self._real_time_close, self._count,
                   self._cost_now,
                   self._cost_used,
                   self._cost_average,
@@ -231,17 +233,15 @@ class Lessismore:
         self._lessdb.insert(values=values)
 
         logging.info(
-            "BUY_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-            "budget_available={7} num_expected={8} actually={9} num_holding={10}".
-                format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
-                       self._cost_used,
-                       self._cost_average,
-                       self._budget_available,
-                       self._num_expected, self._num_actually, self._num_holding))
+            "BUY_DONE time={0} hist={1} close={2} real_time_close={3} count={4} cost_now={5} cost_used={6} "
+            "cost_average={7} budget_available={8} num_expected={9} actually={10} num_holding={11}".
+                format(self._cur_timestamp, self._cur_hist, self._cur_close, self._real_time_close,
+                       self._count, self._cost_now, self._cost_used, self._cost_average,
+                       self._budget_available, self._num_expected, self._num_actually, self._num_holding))
 
     def buy_holding(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._real_time_ts, Operation.BUY_HOLDING, self._real_time_hist, self._real_time_close,
+            values = [self._cur_timestamp, Operation.BUY_HOLDING, self._cur_hist, self._real_time_close,
                       self._count,
                       self._cost_now, self._cost_used,
                       self._cost_average,
@@ -249,17 +249,17 @@ class Lessismore:
             self._lessdb.insert(values=values)
 
             logging.info(
-                "BUY_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11} next_usdt={12}".
-                    format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
-                           self._cost_used, self._cost_average,
-                           self._budget_available,
-                           self._num_expected, self._num_actually, self._num_holding,
+                "BUY_HOLDING time={0} hist={1} close={2} real_time_close={3} count={4} cost_now={5} cost_used={6} "
+                "cost_average={7} budget_available={8} num_expected={9} num_actually={10} num_holding={11} "
+                "waiting_close={12} next_usdt={13}".
+                    format(self._cur_timestamp, self._cur_hist, self._cur_close, self._real_time_close,
+                           self._count, self._cost_now, self._cost_used, self._cost_average,
+                           self._budget_available, self._num_expected, self._num_actually, self._num_holding,
                            self._last_price - self._buy_holding_diff, next_usdt))
 
     def buy_error(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._real_time_ts, Operation.ERROR, self._real_time_hist, self._real_time_close, self._count,
+            values = [self._cur_timestamp, Operation.ERROR, self._cur_hist, self._real_time_close, self._count,
                       self._cost_now,
                       self._cost_used,
                       self._cost_average,
@@ -267,10 +267,11 @@ class Lessismore:
             self._lessdb.insert(values=values)
 
             logging.error(
-                "BUY_ERROR time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} next_usdt={11}".
-                    format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
-                           self._cost_used, self._cost_average, self._budget_available,
+                "BUY_ERROR time={0} hist={1} close={2}, real_time_close={3} count={4} cost_now={5} cost_used={6} "
+                "cost_average={7} budget_available={8} num_expected={9} num_actually={10} num_holding={11} "
+                "next_usdt={12}".
+                    format(self._cur_timestamp, self._cur_hist, self._cur_close, self._real_time_close, self._count,
+                           self._cost_now, self._cost_used, self._cost_average, self._budget_available,
                            self._num_expected, self._num_actually, self._num_holding, next_usdt))
 
     def sell_done(self):
@@ -280,7 +281,7 @@ class Lessismore:
         usdt_available, coin_available = self.reliable_get_balance()
         self.set_running_data(usdt=usdt_available, coin_num=0, ops=None)
 
-        values = [self._real_time_ts, Operation.SELL_DONE, self._real_time_hist, self._real_time_close, self._count,
+        values = [self._cur_timestamp, Operation.SELL_DONE, self._cur_hist, self._real_time_close, self._count,
                   self._cost_now,
                   self._cost_used,
                   self._cost_average,
@@ -288,17 +289,15 @@ class Lessismore:
         self._lessdb.insert(values=values)
 
         logging.info(
-            "SELL_DONE time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-            "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
-                       self._cost_used,
-                       self._cost_average,
-                       self._budget_available,
+            "SELL_DONE time={0} hist={1} close={2} real_time_close={3} count={4} cost_now={5} cost_used={6} "
+            "cost_average={7} budget_available={8} num_expected={9} num_actually={10} num_holding={11}".
+                format(self._cur_timestamp, self._cur_hist, self._cur_close, self._real_time_close, self._count,
+                       self._cost_now, self._cost_used, self._cost_average, self._budget_available,
                        self._num_expected, self._num_actually, self._num_holding))
 
     def sell_holding(self):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._real_time_ts, Operation.SELL_HOLDING, self._real_time_hist, self._real_time_close,
+            values = [self._cur_timestamp, Operation.SELL_HOLDING, self._cur_hist, self._real_time_close,
                       self._count,
                       self._cost_now, self._cost_used,
                       self._cost_average,
@@ -306,11 +305,11 @@ class Lessismore:
             self._lessdb.insert(values=values)
 
             logging.error(
-                "SELL_HOLDING time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                "budget_available={7} num_expected={8} num_actually={9} num_holding={10} waiting_close={11}".
-                    format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count, self._cost_now,
-                           self._cost_used, self._cost_average,
-                           self._budget_available,
+                "SELL_HOLDING time={0} hist={1} close={2} real_time_close={3} count={4} cost_now={5} cost_used={6} "
+                "cost_average={7} budget_available={8} num_expected={9} num_actually={10} num_holding={11} "
+                "waiting_close={12}".
+                    format(self._cur_timestamp, self._cur_hist, self._cur_close, self._real_time_close, self._count,
+                           self._cost_now, self._cost_used, self._cost_average, self._budget_available,
                            self._num_expected, self._num_actually, self._num_holding,
                            self._cost_average + self._profit_at_least))
 
@@ -389,13 +388,15 @@ class Lessismore:
         global_data.calculate_macd()
 
         last_index = global_data.get_len() - 2
-        self._real_time_hist = last_hist = global_data.get_hist(last_index)
-        self._real_time_ts = global_data.get_timestamp(last_index)
+
+        self._cur_hist = global_data.get_hist(last_index)
+        self._cur_timestamp = global_data.get_timestamp(last_index)
+        self._cur_close = global_data.get_timestamp(last_index)
         self._real_time_close = global_data.get_close(global_data.get_len() - 1)
 
-        if last_hist > 0:
+        if self._cur_hist > 0:
             self._trade_direction_cur = LessTradeDirection.LONG
-        elif last_hist < 0:
+        elif self._cur_hist < 0:
             self._trade_direction_cur = LessTradeDirection.SHORT
         else:
             logging.error("Invalid hist=0")
@@ -462,11 +463,12 @@ class Lessismore:
                                 "Already bought in this period on last_buy_done_tim={0}, first_long_time={1}".format(
                                     last_buy_done_time, first_long_ts))
                             logging.info(
-                                "BUY_GIVEUP time={0} hist={1} real_time_close={2} count={3} cost_now={4} cost_used={5} cost_average={6} "
-                                "budget_available={7} num_expected={8} num_actually={9} num_holding={10}".
-                                    format(self._real_time_ts, self._real_time_hist, self._real_time_close, self._count,
-                                           self._cost_now, self._cost_used, self._cost_average,
-                                           self._budget_available,
+                                "BUY_GIVEUP time={0} hist={1} close={2} real_time_close={3} count={4} cost_now={5} "
+                                "cost_used={6} cost_average={7} budget_available={8} num_expected={9} "
+                                "num_actually={10} num_holding={11}".
+                                    format(self._cur_timestamp, self._cur_hist, self._cur_close,
+                                           self._real_time_close, self._count, self._cost_now,
+                                           self._cost_used, self._cost_average, self._budget_available,
                                            self._num_expected, self._num_actually, self._num_holding))
 
                             self._trade_direction_his = self._trade_direction_cur
