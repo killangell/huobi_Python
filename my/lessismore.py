@@ -391,7 +391,7 @@ class Lessismore:
 
         self._cur_hist = global_data.get_hist(last_index)
         self._cur_timestamp = global_data.get_timestamp(last_index)
-        self._cur_close = global_data.get_timestamp(last_index)
+        self._cur_close = global_data.get_close(last_index)
         self._real_time_close = global_data.get_close(global_data.get_len() - 1)
 
         if self._cur_hist > 0:
