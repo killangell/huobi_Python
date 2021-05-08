@@ -4,7 +4,7 @@ import logging
 from enum import IntEnum
 
 from huobi.exception.huobi_api_exception import HuobiApiException
-from my.lesscfg import LESS_SYMBOL, LESS_INTERVAL, LESS_STEP_LEN, LESS_LEAST_PROFIT, LESS_HOLDING_DIFF, LESS_PEAK_DIFF
+from my.lesscfg import LESS_SYMBOL, LESS_INTERVAL, LESS_BASE, LESS_MAX_COUNT, LESS_LEAST_PROFIT, LESS_ADD_DIFF, LESS_PEAK_DIFF
 from my.lessdb import Lessdb, BTC_OPS_TABLE, Operation
 from my.organized import Organized
 from my.upath import UPath
@@ -40,7 +40,7 @@ class Lessismore:
         self._cur_close = 0
         #
         self._count = 0
-        self._cost_now = LESS_STEP_LEN
+        self._cost_now = LESS_BASE
         self._cost_used = 0
         self._cost_average = 0
         self._num_expected = 0
@@ -61,15 +61,17 @@ class Lessismore:
         # 成功执行买入或者卖出的话，不需要监控
         self._need_monitor = True
         self._profit_at_least = LESS_LEAST_PROFIT
-        self._buy_holding_diff = LESS_HOLDING_DIFF
+        self._add_diff = LESS_ADD_DIFF
         # 把钱分为多少份进行购买
-        self._num_copies = 10
+        self._max_count = LESS_MAX_COUNT
 
         print("symbol = ", symbol)
         print("interval = ", interval)
         print("cost_now = ", self._cost_now)
+        print("max_count = ", self._max_count)
         print("profit_at_least = ", self._profit_at_least)
-        print("buy_holding_diff = ", self._buy_holding_diff)
+        print("add_diff = ", self._add_diff)
+        print("peak_diff = ", LESS_PEAK_DIFF)
         print("LESSDB_FILE = " + LESSDB_FILE)
         self._lessdb = Lessdb(LESSDB_FILE)
 
@@ -251,7 +253,7 @@ class Lessismore:
                     format(self._cur_timestamp, self._cur_hist, self._cur_close, self._real_time_close,
                            self._count, self._cost_now, self._cost_used, self._cost_average,
                            self._budget_available, self._num_expected, self._num_actually, self._num_holding,
-                           self._last_price - self._buy_holding_diff, next_usdt))
+                           self._last_price - self._add_diff, next_usdt))
 
     def buy_error(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
@@ -355,7 +357,7 @@ class Lessismore:
         if self._count == 0:
             ret = self._cost_now
         elif self._count == 1:
-            d = Utils.get_diff_of_arit_seq(self._cost_now, self._num_copies, self._cost_now + self._budget_available)
+            d = Utils.get_diff_of_arit_seq(self._cost_now, self._max_count, self._cost_now + self._budget_available)
             if d > 0.0:
                 ret = self._cost_now + d
             else:
@@ -469,7 +471,7 @@ class Lessismore:
                 if self._last_price == 0:
                     condition = self._real_time_close < first_long_price
                 else:
-                    condition = ((self._last_price - self._real_time_close) >= self._buy_holding_diff)
+                    condition = ((self._last_price - self._real_time_close) >= self._add_diff)
 
                 ret = self.try_buy(condition=condition)
 

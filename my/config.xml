@@ -1,0 +1,27 @@
+<?xml version="1.0" ?><root>
+    <account>
+        <!-- 去交易所创建API, qds003 -->
+        <access_key>xxxxx</access_key>
+        <secret_key>xxxxx</secret_key>
+        <account_id>xxxxx</account_id>
+    </account>
+    <params>
+        <!-- 交易品种：目前支持 btcusdt, ethusdt, filusdt -->
+        <symbol>btcusdt</symbol>
+        <!-- 周期: 1min, 5min, 15min, 30min, 60min,4hour,1day, 1mon -->
+        <interval>30min</interval>
+        <!-- 第一笔交易金额：后面每笔交易金额根据账户拥有资金量总数，进行等差数列（金字塔）计算 -->
+        <base>30</base>
+        <!-- 预计交易次数：将当前的资金，按照金字塔模型分为的份数，价格越低买的越多 -->
+        <max_count>10</max_count>
+        <!-- 最少盈利点数：当趋势转为空头方向时，利润必须大于等于该点数才进行平仓 -->
+        <least_profit>200</least_profit>
+        <!-- 趋势补仓差价：差价要大于等于该点数才进行补仓操作-->
+        <add_diff>500</add_diff>
+        <!-- 峰值补仓差价：差价要大于等于该点数才进行建仓或者补仓操作，用于接针-->
+        <peak_diff>5000</peak_diff>
+    </params>
+    <register>
+        <qds_id>_qds_id</qds_id>
+    </register>
+</root>
