@@ -226,10 +226,8 @@ class Lessismore:
             self._cost_average = 0
 
         values = [self._cur_timestamp, Operation.BUY_DONE, self._cur_hist, self._real_time_close, self._count,
-                  self._cost_now,
-                  self._cost_used,
-                  self._cost_average,
-                  self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+                  self._cost_now, self._cost_used, self._cost_average, self._budget_available, self._num_expected,
+                  self._num_actually, self._num_holding]
         self._lessdb.insert(values=values)
 
         logging.info(
@@ -242,10 +240,8 @@ class Lessismore:
     def buy_holding(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
             values = [self._cur_timestamp, Operation.BUY_HOLDING, self._cur_hist, self._real_time_close,
-                      self._count,
-                      self._cost_now, self._cost_used,
-                      self._cost_average,
-                      self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+                      self._count, self._cost_now, self._cost_used, self._cost_average, self._budget_available,
+                      self._num_expected, self._num_actually, self._num_holding]
             self._lessdb.insert(values=values)
 
             logging.info(
@@ -259,11 +255,9 @@ class Lessismore:
 
     def buy_error(self, next_usdt=0):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
-            values = [self._cur_timestamp, Operation.ERROR, self._cur_hist, self._real_time_close, self._count,
-                      self._cost_now,
-                      self._cost_used,
-                      self._cost_average,
-                      self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+            values = [self._cur_timestamp, Operation.BUY_ERROR, self._cur_hist, self._real_time_close, self._count,
+                      self._cost_now, self._cost_used, self._cost_average, self._budget_available, self._num_expected,
+                      self._num_actually, self._num_holding]
             self._lessdb.insert(values=values)
 
             logging.error(
@@ -282,10 +276,8 @@ class Lessismore:
         self.set_running_data(usdt=usdt_available, coin_num=0, ops=None)
 
         values = [self._cur_timestamp, Operation.SELL_DONE, self._cur_hist, self._real_time_close, self._count,
-                  self._cost_now,
-                  self._cost_used,
-                  self._cost_average,
-                  self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+                  self._cost_now, self._cost_used, self._cost_average, self._budget_available, self._num_expected,
+                  self._num_actually, self._num_holding]
         self._lessdb.insert(values=values)
 
         logging.info(
@@ -298,10 +290,8 @@ class Lessismore:
     def sell_holding(self):
         if (self._log_throttle % LOG_THROTTLE_COUNT) == 0:
             values = [self._cur_timestamp, Operation.SELL_HOLDING, self._cur_hist, self._real_time_close,
-                      self._count,
-                      self._cost_now, self._cost_used,
-                      self._cost_average,
-                      self._budget_available, self._num_expected, self._num_actually, self._num_holding]
+                      self._count, self._cost_now, self._cost_used, self._cost_average, self._budget_available,
+                      self._num_expected, self._num_actually, self._num_holding]
             self._lessdb.insert(values=values)
 
             logging.error(

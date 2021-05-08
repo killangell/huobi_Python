@@ -132,7 +132,7 @@ class Lessdb:
         cur.close()
         conn.close()
 
-    def update_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE, cost_used=400, cost_average=55430):
+    def update_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE, cost_used=265, cost_average=55430):
         conn = sqlite3.connect(self._lessdb_file)
         cur = conn.cursor()
 
