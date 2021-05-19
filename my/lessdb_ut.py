@@ -7,13 +7,16 @@ if __name__ == "__main__":
     print("database name: " + LESSDB_FILE)
     lessdb = Lessdb(LESSDB_FILE)
     # lessdb.update_by_operation()
-    # lessdb.debug_select_all()
     lessdb.debug_select_all()
+    # lessdb.debug_select_all()
     # LESSDB_FILE_TEST = 'less_test.db'
     # lessdb = Lessdb(LESSDB_FILE_TEST)
-    #
-    # values = ['Time', Operation.BUY_HOLDING, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+    # values = ['20210519_190000', 0, -241.42737732970397, 38790.73, 9, 30.0, 432.78, 45081, 0, 0.0012897894048357682, 0.0, 0.0096]
     # lessdb.insert('BTC_OPS', values)
+    # print("after fix")
+    # lessdb.debug_select_all()
+
     #
     # lessdb.select('BTC_OPS')
     #

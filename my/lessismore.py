@@ -351,7 +351,7 @@ class Lessismore:
                 return Operation.BUY_DONE
             elif self._budget_available > 1.0:
                 usdt_avail_str = "{0}".format(self._budget_available)
-                usdt_avail = Utils.precision_x(usdt_avail_str, 2)
+                usdt_avail = float(Utils.precision_x(usdt_avail_str, 2))
                 self.buy_done(usdt_avail)
                 return Operation.BUY_DONE
             else:
@@ -371,6 +371,8 @@ class Lessismore:
             self.sell_holding()
 
     def get_next_usdt(self):
+        logging.debug("debug: get_next_usdt cost_now={0} max_count={1} usdt_total={2}".format(
+            self._cost_now, self._max_count, self._cost_used + self._budget_available))
         ret_list = []
         ret_list = Utils.get_list_of_arit_seq(self._cost_now, self._max_count, self._cost_used + self._budget_available)
         ret_str = "{0}".format(ret_list[self._count])
