@@ -364,7 +364,7 @@ class Lessismore:
     def try_sell(self, condition=None):
         logging.debug("debug: try_sell condition={0}".format(condition))
         if condition is None:
-            condition = self._real_time_close - self._cost_average > self._profit_at_least
+            condition = ((self._real_time_close - self._cost_average) > self._profit_at_least)
         if condition:
             self.sell_done()
         else:
@@ -445,7 +445,7 @@ class Lessismore:
                 sell_down_time_str = ops_sell_done[BTC_OPS_TABLE.TIME]
                 buy_done_time = self.get_time_seconds(buy_done_time_str)
                 sell_down_time = self.get_time_seconds(sell_down_time_str)
-                if (buy_done_time > sell_down_time) and (self._num_holding > 0):
+                if (buy_done_time >= sell_down_time) and (self._num_holding > 0):
                     self.set_running_data(ops=ops_buy_done)
                 else:
                     self.set_running_data()
@@ -516,8 +516,8 @@ class Lessismore:
                             first_short_pos = global_data.get_latest_first_hist_position(long=False)
                             first_short_time = global_data.get_timestamp(first_short_pos)
                             # 该条件判断 peak 之后第一次由 long -> short
-                            if self.get_time_seconds(self._last_time) < self.get_time_seconds(first_long_time) \
-                                    < self.get_time_seconds(first_short_time):
+                            if (self.get_time_seconds(self._last_time) < self.get_time_seconds(first_long_time) \
+                                    < self.get_time_seconds(first_short_time)):
                                 logging.info("info: try sell peak position last_time={0}, first_long_time={1}, "
                                              "first_short_time={2}".format(
                                     self._last_time, first_long_time, first_short_time))
@@ -532,7 +532,7 @@ class Lessismore:
                     logging.debug("debug: last_price={0}, real_time_close={1}, diff={2}, peak_diff={3}".format(
                         self._last_price, self._real_time_close, self._last_price - self._real_time_close,
                         LESS_PEAK_DIFF))
-                    if self._last_price - self._real_time_close >= LESS_PEAK_DIFF:
+                    if (self._last_price - self._real_time_close) >= LESS_PEAK_DIFF:
                         logging.info(
                             "info: Add position at peak price real_time_close={0} last_price={1} peak_diff={2}".format(
                                 self._real_time_close, self._last_price, LESS_PEAK_DIFF))
@@ -544,7 +544,7 @@ class Lessismore:
                     logging.debug("debug: time={0}, price={1}, real_time_close={2}, diff={3}, peak_diff={4}".format(
                         global_data.get_timestamp(pos), price, self._real_time_close, price - self._real_time_close,
                         LESS_PEAK_DIFF))
-                    if price - self._real_time_close >= LESS_PEAK_DIFF:
+                    if (price - self._real_time_close) >= LESS_PEAK_DIFF:
                         logging.info(
                             "info: Open position at peak price real_time_close={0} last_price={1} peak_diff={2}".format(
                                 self._real_time_close, self._last_price, LESS_PEAK_DIFF))
