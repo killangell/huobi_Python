@@ -108,8 +108,8 @@ class Lessdb:
         cur.execute("SELECT * FROM {0} WHERE operation={1} ORDER BY ID DESC LIMIT 1".format(table, operation))
         # 获取查询结果
         ret = cur.fetchall()
-        for row in ret:
-            print(row)
+        # for row in ret:
+        #     print(row)
 
         cur.close()
         conn.close()
@@ -159,5 +159,20 @@ class Lessdb:
         else:
             return None
 
+    def select_all_by_operation(self, table='BTC_OPS', operation=Operation.BUY_DONE):
+        conn = sqlite3.connect(self._lessdb_file)
+        cur = conn.cursor()
 
+        cur.execute("SELECT * FROM {0} WHERE operation={1}".format(table, operation))
+        # 获取查询结果
+        ret = cur.fetchall()
+        # for row in ret:
+        #     print(row)
 
+        cur.close()
+        conn.close()
+
+        if ret:
+            return ret[0]
+        else:
+            return None

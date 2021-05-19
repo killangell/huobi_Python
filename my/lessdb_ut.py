@@ -1,11 +1,13 @@
 from lessismore import LESSDB_FILE
 from lessdb import Lessdb
 
+from my.lessdb import Operation
 
 if __name__ == "__main__":
     print("database name: " + LESSDB_FILE)
     lessdb = Lessdb(LESSDB_FILE)
-    lessdb.update_by_operation()
+    # lessdb.update_by_operation()
+    # lessdb.debug_select_all()
     lessdb.debug_select_all()
     # LESSDB_FILE_TEST = 'less_test.db'
     # lessdb = Lessdb(LESSDB_FILE_TEST)
